@@ -1,5 +1,5 @@
 SCRIPT_META = {
-    "name": "Numeración PDF",
+    "name": "Numerar páginas PDF",
     "category": "PDF"
 }
 

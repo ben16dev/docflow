@@ -1,9 +1,8 @@
 SCRIPT_META = {
-    "name": "Extraer con adjuntos",
+    "name": "Extraer adjuntos de MBOX",
     "category": "MBOX"
 }
 
-import re
 import mailbox
 from pathlib import Path
 from datetime import datetime
@@ -30,79 +29,6 @@ from scripts.common.results import build_result, build_cancelled_result
 
 
 # ======================================================
-# CONSTANTES
-# ======================================================
-
-PREFIJOS_EXPEDIENTE = [
-    "GHN", "GHCS", "CSGH", "GH", "CS", "IM",
-    "COMAP", "RA", "365/360", "VIV", "NVIV",
-    "PIAS", "CARTCAM"
-]
-
-_PREF_PATTERN = "|".join(re.escape(p) for p in PREFIJOS_EXPEDIENTE)
-
-_EXPEDIENTE_RE = re.compile(
-    rf"\b({_PREF_PATTERN})[\s\-_\/]*?(\d{{4}})[\s\-_\/]*?(\d+)\b"
-)
-
-
-# ------------------------------------------------------
-# Regex para detectar al cliente en texto libre.
-# Ancla: "en nombre de" / "en representación de".
-# Captura 2-6 tokens con inicial mayúscula, admite
-# partículas (de, del, de la, de los, de las, y).
-# ------------------------------------------------------
-
-_NAME_TOKEN = r"[A-ZÁÉÍÓÚÜÑ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ'\-]+"
-
-_PARTICLE = r"(?:(?i:de\s+(?:la\s+|los\s+|las\s+)?|del\s+|y\s+))"
-
-_NAME = (
-    _NAME_TOKEN
-    + r"(?:\s+(?:" + _PARTICLE + r")?" + _NAME_TOKEN + r"){1,5}"
-)
-
-_ANCHOR = r"(?i:en\s+nombre\s+de|en\s+representaci[oó]n\s+de)"
-
-_FILLER = (
-    r"(?:(?i:mi|su|el|la|nuestro|nuestra|este|esta)\s+"
-    r"(?i:cliente|mandante|representado|representada|"
-    r"defendido|defendida|patrocinad[oa])\s+)?"
-    r"(?:(?i:D\.?ª?|Don|Do[ñn]a)\s+)?"
-)
-
-_STOP = (
-    r"(?=\s*(?:[,;:\(\)\.\"]|"
-    r"(?i:\bcon\b|\ben\s|\bmayor\b|\bvecin[oa]\b|"
-    r"\bDNI\b|\bNIE\b|\bNIF\b|\bnacido[a]?\b)|"
-    r"(?!(?i:de|del|y|i)\b)[a-záéíóúüñ]|"
-    r"$))"
-)
-
-_CLIENTE_RE = re.compile(
-    _ANCHOR + r"\s+" + _FILLER + r"(" + _NAME + r")" + _STOP
-)
-
-
-# Stop list: si el candidato contiene cualquiera de
-# estos tokens, se considera entidad y se descarta.
-_ENTITY_RE = re.compile(
-    r"\b("
-    r"S\.?\s?A\.?|S\.?\s?L\.?\s?U?\.?|S\.?\s?C\.?|"
-    r"Banco|Caja|Aseguradora|Compa[ñn][ií]a|Sociedad|"
-    r"Mutua|Cooperativa|Entidad|Asociaci[oó]n|"
-    r"Fundaci[oó]n|Ltd|Limited|Inc|Corp|"
-    r"Holding|Grupo|Group|Iberdrola|Endesa|Naturgy|"
-    r"Repsol|Telef[oó]nica|Vodafone|Movistar|Orange|"
-    r"Santander|BBVA|Sabadell|Bankinter|Bankia|"
-    r"Caixa|Unicaja|Ibercaja|Liberbank|Abanca|Kutxabank|"
-    r"Mapfre|Mutualidad|Adif|Renfe|Aena|Iberia"
-    r")\b",
-    re.IGNORECASE
-)
-
-
-# ======================================================
 # UTILIDADES BÁSICAS
 # ======================================================
 
@@ -126,144 +52,19 @@ def _format_date(dt):
     return f"{dt.day:02d}.{dt.month:02d}.{dt.year}"
 
 
-def _normalize_spaces(s):
-    return re.sub(r"\s+", " ", (s or "")).strip()
-
-
 def _strip_html(s):
+    import re
     return re.sub(r"<[^>]+>", " ", s or "")
-
-
-# ======================================================
-# DETECCIÓN EXPEDIENTE
-# ======================================================
-
-def _detect_expediente(subject):
-    if not subject:
-        return None
-
-    m = _EXPEDIENTE_RE.search(subject.upper())
-    if not m:
-        return None
-
-    pref, year, num = m.groups()
-    return f"{pref}_{year}_{num}"
-
-
-# ======================================================
-# DETECCIÓN CLIENTE
-# ======================================================
-
-def _looks_like_entity(name):
-    return bool(_ENTITY_RE.search(name or ""))
-
-
-def _extract_cliente_from_text(text):
-    """
-    Busca el primer candidato a cliente en `text` usando
-    las anclas 'en nombre de' / 'en representación de'.
-
-    Descarta candidatos que parezcan entidades jurídicas.
-    """
-
-    if not text:
-        return None
-
-    norm = _normalize_spaces(text)
-
-    for m in _CLIENTE_RE.finditer(norm):
-        candidate = _normalize_spaces(m.group(1))
-
-        if not candidate:
-            continue
-
-        if _looks_like_entity(candidate):
-            continue
-
-        tokens = candidate.split()
-
-        if len(tokens) < 2:
-            continue
-
-        # Cada token debe empezar con mayúscula, salvo
-        # partículas (que se aceptan en minúscula).
-        if not all(
-            t[:1].isupper()
-            or t.lower() in {"de", "del", "la", "las", "los", "y"}
-            for t in tokens
-        ):
-            continue
-
-        return candidate
-
-    return None
-
-
-# ======================================================
-# EXTRACCIÓN DE TEXTO DE PDF
-# ======================================================
-
-def _extract_text_from_pdf_bytes(pdf_bytes):
-    """
-    Extrae texto de un PDF en bytes.
-
-    1) PyMuPDF (rápido).
-    2) pdfplumber (fallback más lento).
-
-    Devuelve "" si nada extrae texto utilizable.
-    """
-
-    from io import BytesIO
-
-    try:
-        import fitz
-
-        chunks = []
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-
-        try:
-            for page in doc:
-                t = page.get_text() or ""
-                if t.strip():
-                    chunks.append(t)
-        finally:
-            doc.close()
-
-        text = "\n".join(chunks).strip()
-        if text:
-            return text
-
-    except Exception as e:
-        logger.warning(f"[MBOX] PyMuPDF falló: {e}")
-
-    try:
-        import pdfplumber
-
-        chunks = []
-        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
-            for page in pdf.pages:
-                t = page.extract_text() or ""
-                if t.strip():
-                    chunks.append(t)
-
-        return "\n".join(chunks).strip()
-
-    except Exception as e:
-        logger.warning(f"[MBOX] pdfplumber falló: {e}")
-        return ""
 
 
 # ======================================================
 # CUERPO DEL CORREO
 # ======================================================
 
-def _extract_bodies(msg):
+def _extract_body(msg):
     """
-    Devuelve (text_visible, text_busqueda):
-      - text_visible: lo que se pinta en el PDF del correo
-        (prefiere text/plain, si no hay limpia el html).
-      - text_busqueda: texto unificado para regex
-        (text/plain + html limpio).
+    Devuelve el texto visible del correo (prefiere text/plain;
+    si no hay, limpia el HTML).
     """
 
     text_body = ""
@@ -306,11 +107,7 @@ def _extract_bodies(msg):
     if not text_visible.strip():
         text_visible = "(Sin contenido)"
 
-    search_text = " ".join(
-        filter(None, [text_body, _strip_html(html_body)])
-    )
-
-    return text_visible, search_text
+    return text_visible
 
 
 # ======================================================
@@ -334,44 +131,6 @@ def _iter_attachment_parts(msg):
             continue
 
         yield part, filename, name_ct
-
-
-def _detect_cliente(msg, search_text):
-    """
-    Busca al cliente:
-      1) En cada PDF adjunto (en orden de aparición).
-      2) Si no encuentra, en el cuerpo del correo.
-    """
-
-    for part, filename, name_ct in _iter_attachment_parts(msg):
-        ref_name = _decode_mime(filename or name_ct)
-        ext = Path(ref_name).suffix.lower()
-
-        if ext != ".pdf":
-            continue
-
-        payload = part.get_payload(decode=True) or b""
-        if not payload:
-            continue
-
-        try:
-            pdf_text = _extract_text_from_pdf_bytes(payload)
-        except Exception as e:
-            logger.warning(f"[MBOX] Error extrayendo PDF: {e}")
-            continue
-
-        if not pdf_text:
-            continue
-
-        cliente = _extract_cliente_from_text(pdf_text)
-        if cliente:
-            return cliente
-
-    cliente = _extract_cliente_from_text(search_text)
-    if cliente:
-        return cliente
-
-    return None
 
 
 def _save_attachments(msg, folder):
@@ -424,7 +183,7 @@ def _render_email_to_pdf(
     styles = getSampleStyleSheet()
 
     title_style = ParagraphStyle(
-        "EDV_Title",
+        "EmailTitle",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
         fontSize=11,
@@ -433,7 +192,7 @@ def _render_email_to_pdf(
     )
 
     meta_style = ParagraphStyle(
-        "EDV_Meta",
+        "EmailMeta",
         parent=styles["Normal"],
         fontName="Helvetica",
         fontSize=9,
@@ -442,7 +201,7 @@ def _render_email_to_pdf(
     )
 
     body_style = ParagraphStyle(
-        "EDV_Body",
+        "EmailBody",
         parent=styles["Normal"],
         fontName="Helvetica",
         fontSize=10,
@@ -487,27 +246,27 @@ def _render_email_to_pdf(
 # NOMBRE DE CARPETA
 # ======================================================
 
-def _build_folder_name(date_str, expediente, cliente, sender_visible):
+def _build_folder_name(date_str, subject, sender_visible, index):
     """
-    Prioridad:
-      1) fecha + expediente
-      2) fecha + cliente
-      3) fecha + SIN_IDENTIFICAR + remitente
+    Organiza cada mensaje en una carpeta por fecha y asunto seguro.
+    Si el asunto no aporta un identificador útil, usa el remitente.
     """
 
-    if expediente:
-        identifier = expediente
+    subject_part = sanitize_filename(
+        subject or "SIN_ASUNTO",
+        max_len=80,
+        fallback="SIN_ASUNTO",
+    )
 
-    elif cliente:
-        identifier = cliente.replace(" ", "_")
-
+    if subject_part in {"SIN_ASUNTO", "(Sin asunto)"}:
+        identifier = sender_visible or f"mensaje_{index:04d}"
     else:
-        identifier = f"SIN_IDENTIFICAR_{sender_visible}"
+        identifier = subject_part
 
     return sanitize_filename(
         f"{date_str}_{identifier}",
         max_len=150,
-        fallback=f"{date_str}_SIN_IDENTIFICAR"
+        fallback=f"{date_str}_mensaje_{index:04d}",
     )
 
 
@@ -552,9 +311,6 @@ def run(progress=None, is_cancelled=None):
     total = len(mbox)
     procesados = 0
     errores = 0
-    con_expediente = 0
-    con_cliente = 0
-    sin_identificar = 0
 
     try:
 
@@ -590,39 +346,17 @@ def run(progress=None, is_cancelled=None):
                     dt = datetime.now()
 
                 date_str = _format_date(dt)
+                body_visible = _extract_body(msg)
 
-                # 1) Expediente desde el asunto
-                expediente = _detect_expediente(subject)
-
-                # 2) Cliente solo si no hay expediente
-                body_visible, search_text = _extract_bodies(msg)
-
-                cliente = None
-                if not expediente:
-                    cliente_raw = _detect_cliente(msg, search_text)
-                    if cliente_raw:
-                        cliente = sanitize_filename(
-                            cliente_raw,
-                            max_len=80,
-                            fallback=""
-                        ) or None
-
-                # Contadores
-                if expediente:
-                    con_expediente += 1
-                elif cliente:
-                    con_cliente += 1
-                else:
-                    sin_identificar += 1
-
-                # 3) Carpeta destino
                 folder_name = _build_folder_name(
-                    date_str, expediente, cliente, sender_visible
+                    date_str, subject, sender_visible, i
                 )
-                folder_path = salida_base / folder_name
-                folder_path.mkdir(exist_ok=True)
+                folder_path = resolve_conflict(
+                    salida_base / folder_name,
+                    pattern="_{i}"
+                )
+                folder_path.mkdir(parents=True, exist_ok=True)
 
-                # 4) PDF del correo
                 pdf_path = resolve_conflict(
                     folder_path / f"{date_str}_Correo_electronico.pdf",
                     pattern="_{i}"
@@ -636,14 +370,12 @@ def run(progress=None, is_cancelled=None):
                     body_visible
                 )
 
-                # 5) .eml original
                 eml_path = resolve_conflict(
                     folder_path / "correo.eml",
                     pattern="_{i}"
                 )
                 eml_path.write_bytes(msg_raw.as_bytes())
 
-                # 6) Adjuntos
                 _save_attachments(msg, folder_path)
 
                 procesados += 1
@@ -667,9 +399,6 @@ def run(progress=None, is_cancelled=None):
 
     logger.info(
         f"[MBOX] Finalizado. Procesados: {procesados}/{total}. "
-        f"Expediente: {con_expediente}. "
-        f"Cliente: {con_cliente}. "
-        f"Sin identificar: {sin_identificar}. "
         f"Errores: {errores}."
     )
 
@@ -679,7 +408,4 @@ def run(progress=None, is_cancelled=None):
         total=total,
         procesados=procesados,
         errores=errores,
-        con_expediente=con_expediente,
-        con_cliente=con_cliente,
-        sin_identificar=sin_identificar,
     )

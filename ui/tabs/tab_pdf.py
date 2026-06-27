@@ -31,15 +31,13 @@ def build_tab(tab, app):
 
     ayudas = [
         "▶ Imágenes a PDF\nConvierte PNG/JPG en PDF.",
-        "▶ Numeración PDF\nEstampa identificadores configurables.",
+        "▶ Numerar páginas PDF\nEstampa identificadores configurables.",
         "▶ Censurar PDF\nCensura visual por palabras.",
         "▶ Renombrar por índice\nUsa un Word como índice.",
         "▶ Rotar páginas\nRota páginas específicas.",
         "▶ Extraer páginas\nExtrae rangos o páginas sueltas.",
         "▶ Unir (orden manual)\nSelecciona y ordena PDFs.",
-        "▶ Unir por expediente\nUne por patrón + número.",
         "▶ Unir por DNI\nUne por coincidencia de datos.",
-        "▶ Nuevo cliente\nGenera hoja de encargo, letrados y procuradores.",
         "▶ Limpiar numeración PDF\nElimina marcas de numeración previas.",
         "▶ Optimizar PDF\nReduce peso manteniendo legibilidad.",
     ]

@@ -18,12 +18,9 @@ def build_tab(tab, app):
         frame,
         "Ayuda – MBOX",
         "▶ MBOX → EML: Extrae correos individuales (.eml) desde un archivo MBOX.\n\n"
-        "▶ Extraer con adjuntos: Por cada correo crea una carpeta con el PDF del "
-        "correo, el .eml original y todos los adjuntos. Identifica al cliente según:\n"
-        "   - Expediente interno en el asunto (GHN, PIAS, VIV, CARTCAM, etc.).\n"
-        "   - Si no hay expediente, busca 'en nombre de' / 'en representación de' "
-        "en los PDFs adjuntos y, como último recurso, en el cuerpo del correo.\n"
-        "   - Si no detecta nada, carpeta 'SIN_IDENTIFICAR' con el remitente.\n\n"
+        "▶ Extraer adjuntos de MBOX: Por cada correo crea una carpeta con el PDF "
+        "del correo, el .eml original y todos los adjuntos. Organiza por fecha y "
+        "asunto del mensaje (o remitente si no hay asunto).\n\n"
         "⚠ Siempre se te pedirá seleccionar el archivo MBOX a procesar."
     )
 

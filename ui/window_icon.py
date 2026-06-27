@@ -1,46 +1,48 @@
+"""
+Aplicación del icono de ventana de DocFlow.
+
+Estrategia multiplataforma:
+  1. iconphoto con assets/icon.png  → funciona en todas las plataformas.
+  2. iconbitmap con assets/icon.ico → mejora visual en Windows (barra de título).
+     Se omite en macOS porque iconbitmap puede lanzar excepciones allí.
+
+Se conserva una referencia viva a la imagen Tkinter para evitar que el
+recolector de basura la elimine antes de que la ventana la use.
+"""
+
 import sys
-from pathlib import Path
 import tkinter as tk
 
-
-def get_base_path() -> Path:
-    """
-    Devuelve la raíz del proyecto tanto en desarrollo como en ejecutable PyInstaller.
-    """
-    if getattr(sys, "frozen", False):
-        return Path(sys._MEIPASS)
-
-    return Path(__file__).resolve().parent.parent
+from utils.resources import resource_path
 
 
 def set_window_icon(window: tk.Misc) -> None:
     """
-    Aplica el icono de DocFlow a una ventana Tk/Toplevel.
+    Aplica el icono de DocFlow a una ventana Tk o Toplevel.
 
-    Prioridad:
-    1. assets/icon.ico para Windows / iconbitmap.
-    2. assets/icon.png para iconphoto.
-
-    Mantiene referencias en la propia ventana para evitar que Tkinter libere
-    la imagen por garbage collection.
+    No lanza excepciones: cualquier error en la carga del recurso
+    se ignora de forma silenciosa para no bloquear el arranque.
     """
     try:
-        base_path = get_base_path()
-        ico_path = base_path / "assets" / "icon.ico"
-        png_path = base_path / "assets" / "icon.png"
+        png_path = resource_path("assets/icon.png")
+        ico_path = resource_path("assets/icon.ico")
 
-        # Windows: iconbitmap suele ser lo más estable para barra de título.
-        if ico_path.exists():
+        # Windows: iconbitmap es la vía más estable para la barra de título.
+        # En macOS puede provocar errores con archivos .ico, por eso se limita
+        # explícitamente a la plataforma Windows.
+        if sys.platform == "win32" and ico_path.exists():
             try:
                 window.iconbitmap(str(ico_path))
             except Exception:
                 pass
 
-        # Tk/Toplevel: iconphoto ayuda a evitar el icono por defecto de Tk.
+        # iconphoto funciona en todas las plataformas.
+        # La referencia _docflow_icon se guarda en la ventana para evitar
+        # que Python libere el objeto antes de que Tkinter lo haya utilizado.
         if png_path.exists():
             try:
                 img = tk.PhotoImage(file=str(png_path))
-                window._docflow_window_icon = img
+                window._docflow_icon = img  # type: ignore[attr-defined]
                 window.iconphoto(False, img)
             except Exception:
                 pass

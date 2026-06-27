@@ -1,8 +1,10 @@
-import logging
-import threading
-import time
 import getpass
+import logging
+import os
+import platform
 import re
+import tempfile
+import threading
 from pathlib import Path
 
 
@@ -15,12 +17,12 @@ BACKUP_COUNT = 5                   # 5 archivos rotados (.1 a .5)
 
 
 # =====================================================
-# UTIL: usuario Windows + nombre de fichero seguro
+# UTIL: usuario + nombre de fichero seguro
 # =====================================================
 
 def _safe_filename_part(value: str, fallback: str = "unknown") -> str:
     """
-    Convierte el usuario a un fragmento seguro para nombres de archivo en Windows.
+    Convierte un valor a un fragmento seguro para nombres de archivo.
     Permite letras, números, guion, guion bajo y punto.
     """
     try:
@@ -35,24 +37,58 @@ def _safe_filename_part(value: str, fallback: str = "unknown") -> str:
     return safe if safe else fallback
 
 
-WINDOWS_USER = _safe_filename_part(getpass.getuser()) + " v2"
+LOG_USER = _safe_filename_part(getpass.getuser())
 
 
-# =====================================================
-# RUTA DE RED + FALLBACK LOCAL CONTROLADO
-# =====================================================
+def _resolve_log_dir() -> Path:
+    """
+    Resuelve la carpeta de logs local según la plataforma.
 
-# TODO: Esta ruta es específica del entorno corporativo anterior (EDV) y debe
-# externalizarse a configuración antes de distribuir DocFlow como producto independiente.
-NETWORK_DIR = Path(
-    r"\\FILESTATION\Datos EDV\2.1 Clientes Archivo Asuntos\01491 CALIDAD\ORDENADO\COMUN\10_ABOGADOS\ALG\EDV_LOGS"
-)
-NETWORK_FILE = NETWORK_DIR / f"docflow_{WINDOWS_USER}.log"
+    Preferencias:
+      - macOS:   ~/Library/Logs/DocFlow
+      - Windows: %LOCALAPPDATA%/DocFlow/logs
+      - Linux:   $XDG_STATE_HOME/DocFlow/logs o ~/.local/state/DocFlow/logs
 
-# Fallback local controlado y estable (no Escritorio)
-LOCAL_DIR = Path.home() / "AppData" / "Local" / "DocFlow" / "logs"
-LOCAL_FILE = LOCAL_DIR / f"docflow_{WINDOWS_USER}.log"
-ERROR_FILE = LOCAL_DIR / "__network_log_error.txt"
+    Si ninguna ruta preferida es usable, usa un fallback local seguro.
+    """
+    home = Path.home()
+    system = platform.system()
+
+    candidates: list[Path] = []
+
+    if system == "Darwin":
+        candidates.append(home / "Library" / "Logs" / "DocFlow")
+    elif system == "Windows":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            candidates.append(Path(local_app_data) / "DocFlow" / "logs")
+        candidates.append(home / "AppData" / "Local" / "DocFlow" / "logs")
+    else:
+        xdg_state = os.environ.get("XDG_STATE_HOME")
+        if xdg_state:
+            candidates.append(Path(xdg_state) / "DocFlow" / "logs")
+        candidates.append(home / ".local" / "state" / "DocFlow" / "logs")
+
+    candidates.append(home / ".docflow" / "logs")
+    candidates.append(Path(tempfile.gettempdir()) / "DocFlow" / "logs")
+
+    for candidate in candidates:
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            probe = candidate / ".write_probe"
+            probe.write_text("", encoding="utf-8")
+            probe.unlink(missing_ok=True)
+            return candidate
+        except Exception:
+            continue
+
+    fallback = Path(tempfile.gettempdir()) / "DocFlow" / "logs"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
+LOG_DIR = _resolve_log_dir()
+LOG_FILE = LOG_DIR / f"docflow_{LOG_USER}.log"
 
 
 # =====================================================
@@ -68,9 +104,6 @@ def _rotate_if_needed(current_path: Path) -> bool:
       .log   -> .log.1
 
     Devuelve True si rotó, False si no hizo falta o falló.
-
-    Tolerante a fallos: si algún rename falla (archivo en uso, red caída),
-    no lanza excepción y deja el log actual tal cual.
     """
     try:
         if not current_path.exists():
@@ -79,16 +112,13 @@ def _rotate_if_needed(current_path: Path) -> bool:
         if current_path.stat().st_size < MAX_LOG_BYTES:
             return False
 
-        # Borrar el backup más antiguo si existe
         oldest = current_path.with_suffix(current_path.suffix + f".{BACKUP_COUNT}")
         if oldest.exists():
             try:
                 oldest.unlink()
             except Exception:
-                # Si no se puede borrar, abortamos la rotación
                 return False
 
-        # Mover .{N-1} -> .{N}, ..., .1 -> .2
         for i in range(BACKUP_COUNT - 1, 0, -1):
             src = current_path.with_suffix(current_path.suffix + f".{i}")
             dst = current_path.with_suffix(current_path.suffix + f".{i + 1}")
@@ -96,10 +126,8 @@ def _rotate_if_needed(current_path: Path) -> bool:
                 try:
                     src.rename(dst)
                 except Exception:
-                    # Si falla un rename intermedio, abortamos
                     return False
 
-        # Mover .log -> .log.1
         first_backup = current_path.with_suffix(current_path.suffix + ".1")
         try:
             current_path.rename(first_backup)
@@ -113,167 +141,69 @@ def _rotate_if_needed(current_path: Path) -> bool:
 
 
 # =====================================================
-# HANDLER CONMUTABLE (local -> red) SIN BLOQUEAR UI
+# HANDLER LOCAL CON ROTACIÓN
 # =====================================================
 
-class SwitchingFileHandler(logging.Handler):
+class LocalFileHandler(logging.Handler):
     """
-    Arranca escribiendo en LOCAL para no bloquear la app.
-    Intenta promocionar a RED en segundo plano.
-    Si RED falla, sigue en LOCAL sin romper ejecución.
-
-    Rota archivos por tamaño (MAX_LOG_BYTES) con BACKUP_COUNT backups.
+    Escribe logs en una ruta local multiplataforma con rotación por tamaño.
     """
 
-    def __init__(self, encoding="utf-8", retry_seconds=10):
+    def __init__(self, log_path: Path, encoding="utf-8"):
         super().__init__()
         self.encoding = encoding
-        self.retry_seconds = retry_seconds
-
         self._lock = threading.Lock()
         self._stream = None
-        self._using_network = False
-        self._current_path = None
-        self._last_retry = 0.0
-        self._retry_in_progress = False
+        self._current_path = log_path
+        self._stream = self._open_log_file()
 
-        # Arranque SIEMPRE local, sin tocar red
-        self._stream = self._open_local_safely()
-        self._current_path = LOCAL_FILE if self._stream is not None else None
-
-    def _write_error_hint(self, exc: Exception) -> None:
+    def _open_log_file(self):
         try:
-            LOCAL_DIR.mkdir(parents=True, exist_ok=True)
-            with open(ERROR_FILE, "a", encoding="utf-8") as f:
-                f.write(
-                    f"{time.strftime('%Y-%m-%d %H:%M:%S')} | ERROR RED LOG: {exc}\n"
-                )
-        except Exception:
-            pass
-
-    def _open_network(self):
-        NETWORK_DIR.mkdir(parents=True, exist_ok=True)
-        return open(NETWORK_FILE, "a", encoding=self.encoding)
-
-    def _open_local_safely(self):
-        try:
-            LOCAL_DIR.mkdir(parents=True, exist_ok=True)
-            return open(LOCAL_FILE, "a", encoding=self.encoding)
+            self._current_path.parent.mkdir(parents=True, exist_ok=True)
+            return open(self._current_path, "a", encoding=self.encoding)
         except Exception:
             return None
 
-    def _swap_stream(self, new_stream, new_path: Path, using_network: bool) -> None:
-        old_stream = self._stream
-        self._stream = new_stream
-        self._current_path = new_path
-        self._using_network = using_network
-
-        if old_stream and old_stream is not new_stream:
-            try:
-                old_stream.close()
-            except Exception:
-                pass
-
     def _reopen_after_rotation(self) -> None:
-        """
-        Cierra el stream actual y reabre el archivo (que ahora estará vacío
-        porque se ha renombrado a .1). Debe llamarse con el lock tomado.
-        """
         try:
             if self._stream:
                 self._stream.close()
         except Exception:
             pass
 
-        try:
-            if self._using_network:
-                self._stream = self._open_network()
-                self._current_path = NETWORK_FILE
-            else:
-                self._stream = self._open_local_safely()
-                self._current_path = LOCAL_FILE
-        except Exception as e:
-            self._write_error_hint(e)
-            # Fallback duro a local si la reapertura falla
-            self._stream = self._open_local_safely()
-            self._current_path = LOCAL_FILE
-            self._using_network = False
-
-    def _should_retry_network(self) -> bool:
-        now = time.time()
-        return (now - self._last_retry) >= self.retry_seconds
-
-    def _schedule_network_retry(self) -> None:
-        with self._lock:
-            if self._using_network:
-                return
-            if self._retry_in_progress:
-                return
-            if not self._should_retry_network():
-                return
-
-            self._retry_in_progress = True
-            self._last_retry = time.time()
-
-        t = threading.Thread(target=self._background_promote_to_network, daemon=True)
-        t.start()
-
-    def _background_promote_to_network(self) -> None:
-        new_stream = None
-        try:
-            new_stream = self._open_network()
-        except Exception as e:
-            self._write_error_hint(e)
-        finally:
-            with self._lock:
-                if new_stream:
-                    self._swap_stream(new_stream, NETWORK_FILE, using_network=True)
-                self._retry_in_progress = False
+        self._stream = self._open_log_file()
 
     def emit(self, record):
         msg = self.format(record)
 
-        # 1) Comprobar rotación + escribir en el stream actual
         with self._lock:
-            stream = self._stream
-            using_network = self._using_network
+            if self._stream is None:
+                self._stream = self._open_log_file()
+
             current_path = self._current_path
 
-            if stream is None:
-                self._stream = self._open_local_safely()
-                stream = self._stream
-                self._current_path = LOCAL_FILE
-                current_path = LOCAL_FILE
-                using_network = False
-
-            # Rotar si toca (antes de escribir)
             if current_path is not None and _rotate_if_needed(current_path):
                 self._reopen_after_rotation()
+
+            stream = self._stream
+
+        if stream is None:
+            return
+
+        try:
+            stream.write(msg + "\n")
+            stream.flush()
+        except Exception:
+            with self._lock:
+                self._stream = self._open_log_file()
                 stream = self._stream
 
-        if stream is not None:
-            try:
-                stream.write(msg + "\n")
-                stream.flush()
-            except Exception as e:
-                self._write_error_hint(e)
-
-                with self._lock:
-                    # Si falla el stream actual, volvemos a local
-                    new_stream = self._open_local_safely()
-                    self._swap_stream(new_stream, LOCAL_FILE, using_network=False)
-                    stream = self._stream
-
-                if stream is not None:
-                    try:
-                        stream.write(msg + "\n")
-                        stream.flush()
-                    except Exception:
-                        pass
-
-        # 2) Si seguimos en local, intentar promocionar a red en segundo plano
-        if not using_network:
-            self._schedule_network_retry()
+            if stream is not None:
+                try:
+                    stream.write(msg + "\n")
+                    stream.flush()
+                except Exception:
+                    pass
 
     def close(self):
         with self._lock:
@@ -296,12 +226,11 @@ _base_logger.setLevel(logging.INFO)
 _base_logger.propagate = False
 
 if not _base_logger.handlers:
-    handler = SwitchingFileHandler(encoding="utf-8", retry_seconds=10)
+    handler = LocalFileHandler(LOG_FILE, encoding="utf-8")
     formatter = logging.Formatter(
         "%(asctime)s | %(levelname)s | user=%(user)s | %(message)s"
     )
     handler.setFormatter(formatter)
     _base_logger.addHandler(handler)
 
-logger = logging.LoggerAdapter(_base_logger, {"user": WINDOWS_USER})
-
+logger = logging.LoggerAdapter(_base_logger, {"user": LOG_USER})

@@ -10,11 +10,9 @@ from scripts.pdf import (
     censurar_pdf_por_palabras,
     extraer_paginas_pdf,
     img_a_pdf,
-    nuevo_cliente,
     numerar_doc_pdf,
     renombrar_pdfs_indice,
     rotar_paginas_pdf,
-    unir_pdfs_expediente,
     unir_pdfs_orden,
     unir_pdfs_por_nombre_dni,
     limpiar_numeracion_pdf,
@@ -39,16 +37,14 @@ SCRIPTS = {
 
     "PDF": {
 
-        "Numeración PDF": numerar_doc_pdf,
+        "Numerar páginas PDF": numerar_doc_pdf,
         "Extraer páginas PDF": extraer_paginas_pdf,
         "Rotar páginas PDF": rotar_paginas_pdf,
-        "Unir PDFs por expediente": unir_pdfs_expediente,
         "Unir PDFs por orden manual": unir_pdfs_orden,
         "Unir PDFs por DNI": unir_pdfs_por_nombre_dni,
         "Renombrar PDFs por índice": renombrar_pdfs_indice,
         "Censurar PDF por palabras": censurar_pdf_por_palabras,
         "Imagen a PDF": img_a_pdf,
-        "Nuevo cliente": nuevo_cliente,
         "Limpiar numeración PDF": limpiar_numeracion_pdf,
         "Optimizar PDF": optimizar_pdf,
 
@@ -63,7 +59,7 @@ SCRIPTS = {
     "MBOX": {
 
         "MBOX a EML": mbox_a_eml,
-        "Extraer con adjuntos": extraer_con_adjuntos,
+        "Extraer adjuntos de MBOX": extraer_con_adjuntos,
 
     }
 
@@ -103,4 +99,3 @@ def get_scripts_metadata(tab_name: str):
         metadata_list.append(meta)
 
     return metadata_list
-

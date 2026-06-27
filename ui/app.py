@@ -1,5 +1,4 @@
 import os
-import sys
 from collections import deque
 from pathlib import Path
 
@@ -26,10 +25,10 @@ from ui.tabs.tab_pdf import build_tab as build_tab_pdf
 from ui.status_bar import StatusBar
 from config import set_ruta, get_ruta
 from ui.window_icon import set_window_icon
+from utils.resources import resource_path
 
 
 RUTA_PLACEHOLDER = "Selecciona la carpeta de trabajo aquí"
-ACCIONES_SIN_RUTA = {"Nuevo cliente"}
 
 
 class App(tk.Tk):
@@ -84,11 +83,6 @@ class App(tk.Tk):
     def _call_ui(self, func, *args, **kwargs):
         self.after(0, lambda: func(*args, **kwargs))
 
-    def _get_base_path(self):
-        if getattr(sys, "frozen", False):
-            return Path(sys._MEIPASS)
-        return Path(__file__).resolve().parent.parent
-
     def _load_icon(self, path, size):
         key = (str(path), size)
 
@@ -130,42 +124,25 @@ class App(tk.Tk):
         )
 
     def _crear_franja_superior(self):
-        top = tk.Frame(self, bg="#eaf4ff", height=80)
-        top.pack(fill="x")
-        top.pack_propagate(False)
-
-        try:
-            base_path = self._get_base_path()
-            logo_path = base_path / "assets" / "logo.png"
-
-            self.logo = self._load_icon(logo_path, (48, 48))
-
-            if self.logo:
-                tk.Label(top, image=self.logo, bg="#eaf4ff").pack(
-                    side="left", padx=(20, 10)
-                )
-
-        except Exception:
-            self.logo = None
-
-        titulo_frame = tk.Frame(top, bg="#eaf4ff")
-        titulo_frame.pack(side="left")
+        top = tk.Frame(self, bg="#eaf4ff")
+        top.pack(fill="x", pady=(8, 4))
 
         tk.Label(
-            titulo_frame,
+            top,
             text=APP_NAME,
             font=("Segoe UI", 18, "bold"),
             bg="#eaf4ff",
-            fg="#1f4e79"
-        ).pack(anchor="w")
+            fg="#1f4e79",
+            padx=20,
+        ).pack(side="left", anchor="w")
 
         tk.Label(
-            titulo_frame,
+            top,
             text=APP_SUBTITLE,
             font=("Segoe UI", 10),
             bg="#eaf4ff",
-            fg="#4f6d8a"
-        ).pack(anchor="w")
+            fg="#4f6d8a",
+        ).pack(side="left", anchor="w")
 
     def _crear_tabs(self):
         self.notebook = ttk.Notebook(self.main_container)
@@ -176,12 +153,9 @@ class App(tk.Tk):
         self.tab_pdf = ttk.Frame(self.notebook)
 
         try:
-            base_path = self._get_base_path()
-            icons_dir = base_path / "ui" / "icons"
-
-            self.icon_mbox = self._load_icon(icons_dir / "mbox.png", (16, 16))
-            self.icon_eml = self._load_icon(icons_dir / "eml.png", (16, 16))
-            self.icon_pdf = self._load_icon(icons_dir / "pdf.png", (16, 16))
+            self.icon_mbox = self._load_icon(resource_path("ui/icons/mbox.png"), (16, 16))
+            self.icon_eml = self._load_icon(resource_path("ui/icons/eml.png"), (16, 16))
+            self.icon_pdf = self._load_icon(resource_path("ui/icons/pdf.png"), (16, 16))
 
             self.notebook.add(
                 self.tab_mbox,
@@ -276,9 +250,6 @@ class App(tk.Tk):
     def _validar_carpeta(self, nombre_script):
         nombre_script = (nombre_script or "").strip()
 
-        if nombre_script in ACCIONES_SIN_RUTA:
-            return True
-
         ruta_txt = (self.var_ruta.get() or "").strip()
 
         if not ruta_txt or ruta_txt == RUTA_PLACEHOLDER:
@@ -371,27 +342,17 @@ class App(tk.Tk):
         if not self._validar_carpeta(nombre_script):
             return
 
-        if nombre_script in ACCIONES_SIN_RUTA:
-            confirmar = messagebox.askyesno(
-                "Confirmar ejecución",
-                f"¿Deseas ejecutar:\n\n{nombre_script}\n\n"
-                f"Se guardará en la carpeta configurada por el propio script.",
-                parent=self
-            )
-        else:
-            confirmar = messagebox.askyesno(
-                "Confirmar ejecución",
-                f"¿Deseas ejecutar:\n\n{nombre_script}\n\nEn la ruta:\n{ruta} ?",
-                parent=self
-            )
+        confirmar = messagebox.askyesno(
+            "Confirmar ejecución",
+            f"¿Deseas ejecutar:\n\n{nombre_script}\n\nEn la ruta:\n{ruta} ?",
+            parent=self
+        )
 
         if not confirmar:
             return
 
         logger.info(f"Ejecutando script: {nombre_script}")
-
-        if nombre_script not in ACCIONES_SIN_RUTA:
-            logger.info(f"Ruta seleccionada: {ruta}")
+        logger.info(f"Ruta seleccionada: {ruta}")
 
         self._actualizar_historial(nombre_script)
 

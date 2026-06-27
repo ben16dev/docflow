@@ -5,63 +5,7 @@ from ui.exceptions import CancelledByUser
 from ui.window_icon import set_window_icon
 
 
-# ======================================================
-# COLORES CORPORATIVOS
-# ======================================================
-
-COLORES_CORPORATIVOS = {
-    "PIAS": {
-        "text": (212, 175, 55),
-        "bg": (40, 81, 164),
-    },
-    "GHN": {
-        "text": (128, 0, 255),
-        "bg": (128, 255, 128),
-    },
-    "IM": {
-        "text": (255, 215, 0),
-        "bg": (20, 20, 95),
-    },
-    "RA": {
-        "text": (128, 0, 0),
-        "bg": (192, 192, 192),
-    },
-    "COMAP": {
-        "text": (245, 240, 245),
-        "bg": (74, 20, 84),
-    },
-    "360/365": {
-        "text": (255, 255, 255),
-        "bg": (210, 90, 60),
-    },
-    "CS": {
-        "text": (45, 45, 50),
-        "bg": (190, 145, 160),
-    },
-    "CARTCAM": {
-        "text": (255, 255, 255),
-        "bg": (0, 102, 204),
-    },
-    "PPDD": {
-        "text": (255, 255, 255),
-        "bg": (180, 40, 40),
-    },
-    "VIV": {
-        "text": (255, 158, 62),
-        "bg": (30, 60, 130),
-    },
-    "NVIV": {
-        "text": (255, 158, 62),
-        "bg": (15, 175, 180),
-    },
-    "EXP": {
-        "text": (245, 230, 185),
-        "bg": (90, 65, 50),
-    },
-}
-
-
-def solicitar_configuracion(font_default: str):
+def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
 
     root = tk._default_root
     created_root = False
@@ -96,8 +40,6 @@ def solicitar_configuracion(font_default: str):
 
     recursivo_var = tk.BooleanVar(value=False)
     eliminar_var = tk.BooleanVar(value=False)
-
-    producto_var = tk.StringVar(value="PIAS")
 
     text_rgb = {"value": (0, 0, 128)}
     bg_rgb = {"value": (255, 255, 255)}
@@ -539,66 +481,6 @@ def solicitar_configuracion(font_default: str):
         column=3,
         sticky="w",
         pady=(8, 0)
-    )
-
-    # ======================================================
-    # COLORES CORPORATIVOS
-    # ======================================================
-
-    def aplicar_colores_corporativos():
-
-        producto = producto_var.get()
-
-        if producto not in COLORES_CORPORATIVOS:
-            return
-
-        colores = COLORES_CORPORATIVOS[producto]
-
-        text_rgb["value"] = colores["text"]
-        bg_rgb["value"] = colores["bg"]
-
-        actualizar_preview()
-
-    ttk.Label(
-        frm,
-        text="Colores corporativos:"
-    ).grid(
-        row=12,
-        column=2,
-        sticky="w",
-        padx=(18, 0),
-        pady=(12, 0)
-    )
-
-    cmb_producto = ttk.Combobox(
-        frm,
-        textvariable=producto_var,
-        values=list(COLORES_CORPORATIVOS.keys()),
-        state="readonly",
-        width=16
-    )
-    cmb_producto.grid(
-        row=13,
-        column=2,
-        sticky="w",
-        padx=(18, 0),
-        pady=(4, 0)
-    )
-
-    ttk.Button(
-        frm,
-        text="Aplicar",
-        command=aplicar_colores_corporativos
-    ).grid(
-        row=13,
-        column=3,
-        sticky="w",
-        pady=(4, 0)
-    )
-
-    cmb_producto.bind(
-        "<<ComboboxSelected>>",
-        lambda _e: aplicar_colores_corporativos()
     )
 
     # ======================================================
