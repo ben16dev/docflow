@@ -1,0 +1,11 @@
+build/
+dist/
+__pycache__/
+*.pyc
+config.json
+FULL_SOURCE.txt
+.venv/
+.pytest_cache/
+*.spec.bak
+.vscode/
+.idea/

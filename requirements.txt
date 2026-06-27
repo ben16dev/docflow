@@ -1,0 +1,31 @@
+# =====================================================
+# EDV AppScript - Dependencias pinneadas (Python 3.13)
+# =====================================================
+# Versiones con wheels precompiladas para Python 3.13.
+# No requiere Visual Studio ni compilador C.
+#
+# Para actualizar una dependencia:
+#   1. Cambiar la versión aquí
+#   2. python -m pip install -r requirements.txt --upgrade
+#   3. python -m pytest tests
+#   4. Probar la app manualmente
+#   5. Commit si todo va bien
+# =====================================================
+
+# PDF - lectura, escritura, manipulación
+pypdf==5.1.0
+PyMuPDF==1.25.1
+pdfplumber==0.11.4
+
+# PDF - generación (reportes, watermarks, correos a PDF)
+reportlab==4.2.5
+
+# Imágenes
+Pillow==11.0.0
+
+# Office
+openpyxl==3.1.5
+python-docx==1.1.2
+
+# Tests
+pytest==8.3.4
