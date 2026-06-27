@@ -12,7 +12,7 @@ def build_result(
     **extra_stats: Any
 ) -> Dict[str, Any]:
     """
-    Construye un resultado estándar para EDV AppScript.
+    Construye un resultado estándar para DocFlow.
 
     Formato:
     {

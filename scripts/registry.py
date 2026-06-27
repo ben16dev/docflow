@@ -1,5 +1,5 @@
 """
-Registro central de scripts disponibles en EDV AppScript.
+Registro central de scripts disponibles en DocFlow.
 """
 
 # ==========================================================

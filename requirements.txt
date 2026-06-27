@@ -1,5 +1,5 @@
 # =====================================================
-# EDV AppScript - Dependencias pinneadas (Python 3.13)
+# DocFlow - Dependencias pinneadas (Python 3.13)
 # =====================================================
 # Versiones con wheels precompiladas para Python 3.13.
 # No requiere Visual Studio ni compilador C.

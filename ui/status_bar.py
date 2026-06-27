@@ -145,7 +145,7 @@ class StatusBar(tk.Frame):
             self,
             orient="horizontal",
             mode="determinate",
-            style="EDV.Horizontal.TProgressbar"
+            style="DocFlow.Horizontal.TProgressbar"
         )
         self.progress.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 8))
 
@@ -156,7 +156,7 @@ class StatusBar(tk.Frame):
     def _show_diagnostics(self):
 
         win = tk.Toplevel(self)
-        win.title("Diagnóstico EDV AppScript")
+        win.title("Diagnóstico DocFlow")
         win.geometry("600x450")
 
         text = tk.Text(win, wrap="word", font=("Consolas", 10))

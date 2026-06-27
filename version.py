@@ -1,6 +1,6 @@
 # version.py
 
-APP_NAME = "EDV AppScript"
+APP_NAME = "DocFlow"
 APP_SUBTITLE = "Herramienta de gestión documental"
 APP_VERSION = "3.0.2"
 APP_AUTHOR = "Desarrollado por Alejandro Laso Gómez"

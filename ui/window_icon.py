@@ -15,7 +15,7 @@ def get_base_path() -> Path:
 
 def set_window_icon(window: tk.Misc) -> None:
     """
-    Aplica el icono corporativo de EDV AppScript a una ventana Tk/Toplevel.
+    Aplica el icono de DocFlow a una ventana Tk/Toplevel.
 
     Prioridad:
     1. assets/icon.ico para Windows / iconbitmap.
@@ -40,7 +40,7 @@ def set_window_icon(window: tk.Misc) -> None:
         if png_path.exists():
             try:
                 img = tk.PhotoImage(file=str(png_path))
-                window._edv_window_icon = img
+                window._docflow_window_icon = img
                 window.iconphoto(False, img)
             except Exception:
                 pass

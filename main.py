@@ -11,7 +11,7 @@ from pathlib import Path
 if os.name == "nt":
     try:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            "EDV.AppScript"
+            "DocFlow"
         )
     except Exception:
         pass

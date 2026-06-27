@@ -42,14 +42,16 @@ WINDOWS_USER = _safe_filename_part(getpass.getuser()) + " v2"
 # RUTA DE RED + FALLBACK LOCAL CONTROLADO
 # =====================================================
 
+# TODO: Esta ruta es específica del entorno corporativo anterior (EDV) y debe
+# externalizarse a configuración antes de distribuir DocFlow como producto independiente.
 NETWORK_DIR = Path(
     r"\\FILESTATION\Datos EDV\2.1 Clientes Archivo Asuntos\01491 CALIDAD\ORDENADO\COMUN\10_ABOGADOS\ALG\EDV_LOGS"
 )
-NETWORK_FILE = NETWORK_DIR / f"edv_app_{WINDOWS_USER}.log"
+NETWORK_FILE = NETWORK_DIR / f"docflow_{WINDOWS_USER}.log"
 
 # Fallback local controlado y estable (no Escritorio)
-LOCAL_DIR = Path.home() / "AppData" / "Local" / "EDV_AppScript" / "logs"
-LOCAL_FILE = LOCAL_DIR / f"edv_app_{WINDOWS_USER}.log"
+LOCAL_DIR = Path.home() / "AppData" / "Local" / "DocFlow" / "logs"
+LOCAL_FILE = LOCAL_DIR / f"docflow_{WINDOWS_USER}.log"
 ERROR_FILE = LOCAL_DIR / "__network_log_error.txt"
 
 
@@ -289,7 +291,7 @@ class SwitchingFileHandler(logging.Handler):
 # LOGGER PÚBLICO
 # =====================================================
 
-_base_logger = logging.getLogger("EDV_AppScript")
+_base_logger = logging.getLogger("DocFlow")
 _base_logger.setLevel(logging.INFO)
 _base_logger.propagate = False
 

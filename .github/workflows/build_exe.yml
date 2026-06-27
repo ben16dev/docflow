@@ -34,7 +34,7 @@ jobs:
       - name: Compilar ejecutable
         run: |
           pyinstaller main.py `
-            --name "EDV AppScript" `
+            --name "DocFlow" `
             --onefile `
             --windowed `
             --icon=assets/icon.ico `
@@ -51,12 +51,12 @@ jobs:
       - name: Subir EXE como artefacto (siempre)
         uses: actions/upload-artifact@v4
         with:
-          name: EDV AppScript
-          path: "dist/EDV AppScript.exe"
+          name: DocFlow
+          path: "dist/DocFlow.exe"
           retention-days: 30
 
       - name: Subir EXE a la Release (solo si es release)
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2.2.1
         with:
-          files: "dist/EDV AppScript.exe"
+          files: "dist/DocFlow.exe"

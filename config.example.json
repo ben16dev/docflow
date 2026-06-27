@@ -1,10 +1,10 @@
 {
   "rutas": {
-    "mbox": "C:/Users/ALG/Desktop/TEST_EDV_SCRIPT/MBOX",
-    "eml": "C:/Users/ALG/Desktop/TEST_EDV_SCRIPT/MBOX",
-    "pdf": "C:/Users/ALG/Desktop/TEST_EDV_SCRIPT/MBOX",
-    "otros": "C:/Users/ALG/Desktop/TEST_EDV_SCRIPT/MBOX",
-    "general": "C:/Users/ALG/Desktop/TEST_EDV_SCRIPT/MBOX"
+    "mbox": "C:/Users/usuario/Documents/DocFlow/MBOX",
+    "eml": "C:/Users/usuario/Documents/DocFlow/EML",
+    "pdf": "C:/Users/usuario/Documents/DocFlow/PDF",
+    "otros": "C:/Users/usuario/Documents/DocFlow/OTROS",
+    "general": "C:/Users/usuario/Documents/DocFlow"
   },
   "last_tab_index": 0
 }

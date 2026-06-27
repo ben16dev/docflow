@@ -1,5 +1,5 @@
 """
-Contrato base para scripts de EDV AppScript.
+Contrato base para scripts de DocFlow.
 
 Este archivo define el interfaz esperado para cualquier script
 ejecutable desde la aplicación.

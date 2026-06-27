@@ -111,7 +111,7 @@ class App(tk.Tk):
                 try:
                     import ctypes
                     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                        "EDV.AppScript"
+                        "DocFlow"
                     )
                 except Exception:
                     pass
@@ -123,7 +123,7 @@ class App(tk.Tk):
         style = ttk.Style(self)
         style.theme_use("default")
         style.configure(
-            "EDV.Horizontal.TProgressbar",
+            "DocFlow.Horizontal.TProgressbar",
             troughcolor="#eaf4ff",
             background="#6de800",
             thickness=16
