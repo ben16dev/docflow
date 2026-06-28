@@ -32,20 +32,7 @@ jobs:
         run: python -m pytest tests -v
 
       - name: Compilar ejecutable
-        run: |
-          pyinstaller main.py `
-            --name "DocFlow" `
-            --onefile `
-            --windowed `
-            --icon=assets/icon.ico `
-            --add-data "assets/icon.ico;assets" `
-            --add-data "ui/icons;ui/icons" `
-            --hidden-import=pypdf `
-            --hidden-import=fitz `
-            --hidden-import=reportlab `
-            --hidden-import=docx `
-            --noconfirm `
-            --clean
+        run: pyinstaller DocFlow.spec --noconfirm --clean
 
       - name: Subir EXE como artefacto (siempre)
         uses: actions/upload-artifact@v4
@@ -59,3 +46,16 @@ jobs:
         uses: softprops/action-gh-release@v2.2.1
         with:
           files: "dist/DocFlow.exe"
+
+# ── Para añadir un job macOS en el futuro ─────────────────────────────────────
+# Pasos necesarios:
+#   1. Añadir un job con `runs-on: macos-latest`.
+#   2. El mismo comando `pyinstaller DocFlow.spec --noconfirm --clean` generará
+#      dist/DocFlow.app automáticamente gracias al bloque BUNDLE del spec.
+#   3. Comprimir el .app antes de subirlo como artefacto:
+#        zip -r dist/DocFlow-mac.zip dist/DocFlow.app
+#   4. Para distribución pública se requiere firma (codesign) y notarización
+#      (notarytool / altool) con un Apple Developer ID. Sin esto, Gatekeeper
+#      bloqueará la app en sistemas de terceros.
+#   5. Cambiar el bundle identifier "com.docflow.app" por uno basado en el
+#      dominio o empresa real antes de iniciar el proceso de firma.

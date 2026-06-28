@@ -9,3 +9,4 @@ FULL_SOURCE.txt
 *.spec.bak
 .vscode/
 .idea/
+.DS_Store
