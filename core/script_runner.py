@@ -1,6 +1,8 @@
 import threading
 import traceback
-from logger import logger
+
+from core.errors import format_user_error
+from logger import LOG_FILE, logger
 from ui.exceptions import CancelledByUser
 
 
@@ -34,11 +36,15 @@ class ScriptRunner:
                     "stats": {}
                 })
 
-            except Exception:
+            except Exception as exc:
                 error_text = traceback.format_exc()
                 logger.error(error_text)
+                logger.error(f"[ScriptRunner] {exc}")
 
-                on_error("Se ha producido un error durante la ejecución.\nRevisa el log.")
+                on_error({
+                    "user_message": format_user_error(exc),
+                    "log_file": str(LOG_FILE),
+                })
 
             finally:
                 on_finally()

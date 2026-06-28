@@ -13,7 +13,6 @@ from PIL import Image, ImageTk
 from logger import logger
 from version import (
     APP_NAME,
-    APP_SUBTITLE,
     APP_VERSION,
     APP_AUTHOR,
 )
@@ -22,10 +21,12 @@ from ui.tabs.tab_mbox import build_tab as build_tab_mbox
 from ui.tabs.tab_eml import build_tab as build_tab_eml
 from ui.tabs.tab_pdf import build_tab as build_tab_pdf
 
+from ui.dialog_error import show_error_dialog
 from ui.status_bar import StatusBar
 from config import set_ruta, get_ruta
 from ui.window_icon import set_window_icon
 from utils.resources import resource_path
+from ui.styles import TOP_BG
 
 
 RUTA_PLACEHOLDER = "Selecciona la carpeta de trabajo aquí"
@@ -57,11 +58,11 @@ class App(tk.Tk):
         self.var_ruta.set(str(ruta_inicial) if ruta_inicial else "")
 
         self._crear_estilos()
-        self._crear_franja_superior()
 
         self.main_container = tk.Frame(self)
         self.main_container.pack(fill="both", expand=True)
 
+        self._crear_cabecera()
         self._crear_tabs()
 
         self.status_bar = StatusBar(
@@ -113,6 +114,34 @@ class App(tk.Tk):
         except Exception:
             pass
 
+    def _crear_cabecera(self):
+        """Cabecera compacta con logo centrado sobre las pestañas."""
+        LOGO_H = 48
+
+        header = tk.Frame(self.main_container, bg=TOP_BG)
+        header.pack(fill="x", side="top")
+
+        self._logo_image = None
+
+        try:
+            logo_path = resource_path("assets/logo.png")
+            img = Image.open(logo_path).convert("RGBA")
+            orig_w, orig_h = img.size
+            new_w = int(orig_w * LOGO_H / orig_h)
+            img = img.resize((new_w, LOGO_H), Image.Resampling.LANCZOS)
+            self._logo_image = ImageTk.PhotoImage(img)
+            tk.Label(
+                header,
+                image=self._logo_image,
+                bg=TOP_BG,
+                bd=0,
+                highlightthickness=0,
+            ).pack(pady=(9, 9))
+        except Exception as exc:
+            logger.warning(f"No se pudo cargar assets/logo.png: {exc}")
+
+        tk.Frame(self.main_container, height=1, bg="#c8ddf0").pack(fill="x", side="top")
+
     def _crear_estilos(self):
         style = ttk.Style(self)
         style.theme_use("default")
@@ -122,27 +151,6 @@ class App(tk.Tk):
             background="#6de800",
             thickness=16
         )
-
-    def _crear_franja_superior(self):
-        top = tk.Frame(self, bg="#eaf4ff")
-        top.pack(fill="x", pady=(8, 4))
-
-        tk.Label(
-            top,
-            text=APP_NAME,
-            font=("Segoe UI", 18, "bold"),
-            bg="#eaf4ff",
-            fg="#1f4e79",
-            padx=20,
-        ).pack(side="left", anchor="w")
-
-        tk.Label(
-            top,
-            text=APP_SUBTITLE,
-            font=("Segoe UI", 10),
-            bg="#eaf4ff",
-            fg="#4f6d8a",
-        ).pack(side="left", anchor="w")
 
     def _crear_tabs(self):
         self.notebook = ttk.Notebook(self.main_container)
@@ -396,8 +404,13 @@ class App(tk.Tk):
             if carpeta:
                 self._call_ui(self.status_bar.enable_open_button, carpeta)
 
-        def on_error(error_msg=None):
-            mensaje = error_msg or "Error durante ejecución"
+        def on_error(error_payload=None):
+            if isinstance(error_payload, dict):
+                mensaje = error_payload.get("user_message") or "Error durante ejecución"
+                log_file = error_payload.get("log_file")
+            else:
+                mensaje = error_payload or "Error durante ejecución"
+                log_file = None
 
             self.last_result = {
                 "script_name": nombre_script,
@@ -406,13 +419,19 @@ class App(tk.Tk):
                 "stats": {}
             }
 
-            self._call_ui(
-                messagebox.showerror,
-                "Error",
-                mensaje,
-                parent=self
-            )
-            self._call_ui(self.status_bar.set_status, "Error durante ejecución")
+            def _mostrar_error():
+                show_error_dialog(
+                    parent=self,
+                    user_message=mensaje,
+                    log_file=log_file,
+                )
+
+            self._call_ui(_mostrar_error)
+
+            status = mensaje.split("\n", 1)[0]
+            if len(status) > 80:
+                status = status[:77] + "..."
+            self._call_ui(self.status_bar.set_status, f"Error: {status}")
             self._call_ui(self.status_bar.set_state, "error")
 
         def on_finally():

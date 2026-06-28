@@ -1,13 +1,11 @@
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
-import subprocess
-import sys
-import os
 import time
 import platform
 
 from scripts.registry import get_scripts
+from utils.platform_open import open_path
 
 
 class StatusBar(tk.Frame):
@@ -252,12 +250,7 @@ class StatusBar(tk.Frame):
             self.disable_open_button()
             return
 
-        if sys.platform.startswith("win"):
-            os.startfile(str(path))
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", str(path)])
-        else:
-            subprocess.Popen(["xdg-open", str(path)])
+        open_path(path)
 
     # ==================================================
     # CANCEL

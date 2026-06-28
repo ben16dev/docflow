@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 SCRIPT_META = {
     "name": "Extraer adjuntos de MBOX",
     "category": "MBOX"
@@ -32,6 +33,30 @@ from scripts.common.results import build_result, build_cancelled_result
 # UTILIDADES BÁSICAS
 # ======================================================
 
+def _decode_bytes(data: bytes, charset: str | None = None) -> str:
+    """
+    Decodifica bytes de correo probando el charset declarado y alternativas habituales.
+    Preserva caracteres españoles (á, é, í, ó, ú, ñ, ü) evitando descartarlos en silencio.
+    """
+    if not data:
+        return ""
+
+    encodings: list[str] = []
+    if charset:
+        encodings.append(charset)
+    for fallback in ("utf-8", "latin-1", "cp1252"):
+        if fallback not in encodings:
+            encodings.append(fallback)
+
+    for encoding in encodings:
+        try:
+            return data.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            continue
+
+    return data.decode("utf-8", errors="replace")
+
+
 def _decode_mime(value):
     if not value:
         return ""
@@ -41,7 +66,7 @@ def _decode_mime(value):
 
     for chunk, enc in parts:
         if isinstance(chunk, bytes):
-            out.append(chunk.decode(enc or "utf-8", errors="ignore"))
+            out.append(_decode_bytes(chunk, enc))
         else:
             out.append(str(chunk))
 
@@ -81,10 +106,7 @@ def _extract_body(msg):
             payload = part.get_payload(decode=True) or b""
             cs = part.get_content_charset()
 
-            try:
-                content = payload.decode(cs or "utf-8", errors="ignore")
-            except Exception:
-                content = payload.decode("latin1", errors="ignore")
+            content = _decode_bytes(payload, cs)
 
             if ctype == "text/plain" and not text_body:
                 text_body = content
@@ -93,11 +115,7 @@ def _extract_body(msg):
     else:
         payload = msg.get_payload(decode=True) or b""
         cs = msg.get_content_charset()
-
-        try:
-            text_body = payload.decode(cs or "utf-8", errors="ignore")
-        except Exception:
-            text_body = payload.decode("latin1", errors="ignore")
+        text_body = _decode_bytes(payload, cs)
 
     text_visible = text_body.strip()
 
@@ -295,6 +313,7 @@ def run(progress=None, is_cancelled=None):
         )
 
     mbox_path = Path(mbox_path)
+    # Nombre ASCII intencional para compatibilidad multiplataforma en rutas de salida.
     salida_base = Path(ruta_base) / "MBOX_extraidos"
     salida_base.mkdir(exist_ok=True)
 
@@ -358,6 +377,7 @@ def run(progress=None, is_cancelled=None):
                 folder_path.mkdir(parents=True, exist_ok=True)
 
                 pdf_path = resolve_conflict(
+                    # Nombre ASCII intencional; el contenido del PDF conserva tildes.
                     folder_path / f"{date_str}_Correo_electronico.pdf",
                     pattern="_{i}"
                 )

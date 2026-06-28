@@ -37,7 +37,6 @@ def build_tab(tab, app):
         "▶ Rotar páginas\nRota páginas específicas.",
         "▶ Extraer páginas\nExtrae rangos o páginas sueltas.",
         "▶ Unir (orden manual)\nSelecciona y ordena PDFs.",
-        "▶ Unir por DNI\nUne por coincidencia de datos.",
         "▶ Limpiar numeración PDF\nElimina marcas de numeración previas.",
         "▶ Optimizar PDF\nReduce peso manteniendo legibilidad.",
     ]

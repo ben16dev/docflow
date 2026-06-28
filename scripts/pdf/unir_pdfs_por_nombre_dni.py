@@ -1,3 +1,6 @@
+# DEPRECATED — Fase 1: retirado del registro e interfaz de DocFlow.
+# No volver a registrar en scripts/registry.py.
+# Sustituto futuro: agrupación por patrón configurable.
 SCRIPT_META = {
     "name": "Unir PDFs por DNI",
     "category": "PDF"

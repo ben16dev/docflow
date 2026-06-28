@@ -14,7 +14,6 @@ from scripts.pdf import (
     renombrar_pdfs_indice,
     rotar_paginas_pdf,
     unir_pdfs_orden,
-    unir_pdfs_por_nombre_dni,
     limpiar_numeracion_pdf,
     optimizar_pdf,
 )
@@ -41,7 +40,6 @@ SCRIPTS = {
         "Extraer páginas PDF": extraer_paginas_pdf,
         "Rotar páginas PDF": rotar_paginas_pdf,
         "Unir PDFs por orden manual": unir_pdfs_orden,
-        "Unir PDFs por DNI": unir_pdfs_por_nombre_dni,
         "Renombrar PDFs por índice": renombrar_pdfs_indice,
         "Censurar PDF por palabras": censurar_pdf_por_palabras,
         "Imagen a PDF": img_a_pdf,

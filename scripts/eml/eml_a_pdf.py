@@ -5,6 +5,8 @@ SCRIPT_META = {
  
 import re
 import html as html_lib
+import os
+import platform
 import tempfile
 import subprocess
 import shutil
@@ -23,33 +25,114 @@ from scripts.common.results import build_result, build_cancelled_result
  
  
 # -------------------------------------------------
-# Chrome / Edge autodetect (Windows)
+# Chrome / Edge autodetect (multiplataforma)
 # -------------------------------------------------
-_CHROME_CACHE = None
- 
- 
-def _find_chrome_exe() -> str:
-    global _CHROME_CACHE
-    if _CHROME_CACHE:
-        return _CHROME_CACHE
- 
-    p = shutil.which("chrome") or shutil.which("chrome.exe")
-    if p:
-        _CHROME_CACHE = p
-        return p
- 
-    candidates = [
+_HEADLESS_BROWSER_CACHE = None
+
+
+def _is_executable(path: Path) -> bool:
+    return path.is_file() and os.access(path, os.X_OK)
+
+
+def _register_candidate(candidates: list[Path], path: Path) -> None:
+    resolved = path.expanduser()
+    if resolved not in candidates:
+        candidates.append(resolved)
+
+
+def _which_candidates(*names: str) -> list[Path]:
+    found = []
+    for name in names:
+        located = shutil.which(name)
+        if located:
+            found.append(Path(located))
+    return found
+
+
+def _darwin_browser_candidates() -> list[Path]:
+    candidates: list[Path] = []
+
+    for name in ("google-chrome", "chromium", "microsoft-edge"):
+        candidates.extend(_which_candidates(name))
+
+    app_paths = [
+        "~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "~/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    ]
+    for app_path in app_paths:
+        _register_candidate(candidates, Path(app_path))
+
+    return candidates
+
+
+def _windows_browser_candidates() -> list[Path]:
+    candidates: list[Path] = []
+
+    candidates.extend(_which_candidates("chrome", "chrome.exe", "msedge", "msedge.exe"))
+
+    for fixed in (
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-    ]
- 
-    for c in candidates:
-        if Path(c).exists():
-            _CHROME_CACHE = c
-            return c
- 
+    ):
+        _register_candidate(candidates, Path(fixed))
+
+    return candidates
+
+
+def _linux_browser_candidates() -> list[Path]:
+    candidates: list[Path] = []
+
+    candidates.extend(_which_candidates(
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+        "microsoft-edge",
+    ))
+
+    for fixed in (
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/snap/bin/chromium",
+    ):
+        _register_candidate(candidates, Path(fixed))
+
+    return candidates
+
+
+def _browser_candidates_for_platform() -> list[Path]:
+    system = platform.system()
+    if system == "Darwin":
+        return _darwin_browser_candidates()
+    if system == "Windows":
+        return _windows_browser_candidates()
+    return _linux_browser_candidates()
+
+
+def _find_headless_browser() -> str:
+    global _HEADLESS_BROWSER_CACHE
+    if _HEADLESS_BROWSER_CACHE:
+        return _HEADLESS_BROWSER_CACHE
+
+    checked: list[str] = []
+    for candidate in _browser_candidates_for_platform():
+        candidate_str = str(candidate)
+        checked.append(candidate_str)
+        if _is_executable(candidate):
+            _HEADLESS_BROWSER_CACHE = candidate_str
+            logger.info(f"[EML-A-PDF] Navegador detectado: {candidate_str}")
+            return _HEADLESS_BROWSER_CACHE
+
+    logger.error(
+        "[EML-A-PDF] Navegador no encontrado. Candidatos comprobados: "
+        + "; ".join(checked)
+    )
     raise RuntimeError(
         "No se encontró Google Chrome ni Microsoft Edge. "
         "Es necesario tener uno de ellos instalado para convertir EML a PDF."
@@ -261,7 +344,7 @@ def run(progress=None, is_cancelled=None):
     output = carpeta / "PDF_email"
     output.mkdir(exist_ok=True)
  
-    chrome = _find_chrome_exe()
+    chrome = _find_headless_browser()
  
     total = len(emls)
     procesados = 0
