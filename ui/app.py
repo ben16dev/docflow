@@ -20,6 +20,7 @@ from version import (
 from ui.tabs.tab_mbox import build_tab as build_tab_mbox
 from ui.tabs.tab_eml import build_tab as build_tab_eml
 from ui.tabs.tab_pdf import build_tab as build_tab_pdf
+from ui.tabs.tab_archivos import build_tab as build_tab_archivos
 
 from ui.dialog_error import show_error_dialog
 from ui.status_bar import StatusBar
@@ -159,6 +160,7 @@ class App(tk.Tk):
         self.tab_mbox = ttk.Frame(self.notebook)
         self.tab_eml = ttk.Frame(self.notebook)
         self.tab_pdf = ttk.Frame(self.notebook)
+        self.tab_archivos = ttk.Frame(self.notebook)
 
         try:
             self.icon_mbox = self._load_icon(resource_path("ui/icons/mbox.png"), (16, 16))
@@ -183,15 +185,18 @@ class App(tk.Tk):
                 image=self.icon_pdf,
                 compound="left"
             )
+            self.notebook.add(self.tab_archivos, text="Archivos")
 
         except Exception:
             self.notebook.add(self.tab_mbox, text="MBOX")
             self.notebook.add(self.tab_eml, text="EML")
             self.notebook.add(self.tab_pdf, text="PDF")
+            self.notebook.add(self.tab_archivos, text="Archivos")
 
         build_tab_mbox(self.tab_mbox, self)
         build_tab_eml(self.tab_eml, self)
         build_tab_pdf(self.tab_pdf, self)
+        build_tab_archivos(self.tab_archivos, self)
 
     def _seleccionar_carpeta(self):
         ruta = filedialog.askdirectory(parent=self)
@@ -448,6 +453,111 @@ class App(tk.Tk):
             on_success=on_success,
             on_error=on_error,
             on_finally=on_finally
+        )
+
+    def _ejecutar_herramienta(self, funcion, *args, **kwargs):
+        """
+        Ejecuta una herramienta que gestiona su propia selección de archivos.
+
+        A diferencia de _ejecutar(), no valida ninguna carpeta global:
+        la herramienta es responsable de pedir al usuario los archivos
+        que necesita a través de sus propios diálogos.
+
+        Uso previsto para las herramientas de la pestaña "Archivos".
+        """
+        if self._ejecutando:
+            return
+
+        nombre_script = kwargs.get("action", "Herramienta")
+
+        logger.info(f"Ejecutando herramienta: {nombre_script}")
+
+        self._actualizar_historial(nombre_script)
+
+        self._ejecutando = True
+        self._cancelado = False
+
+        self.config(cursor="watch")
+        self.status_bar.reset_progress()
+        self.status_bar.reset_timer()
+        self.status_bar.disable_open_button()
+        self.status_bar.set_status(f"Ejecutando: {nombre_script}")
+        self.status_bar.set_state("running")
+        self._bloquear_tabs(True)
+
+        def progreso(actual, total):
+            self._call_ui(self.status_bar.set_progress, actual, total)
+
+        def cancelado():
+            return self._cancelado
+
+        def on_success(resultado):
+            if isinstance(resultado, dict):
+                mensaje = resultado.get("message", "Completado")
+                carpeta = resultado.get("output_dir")
+                stats = resultado.get("stats", {})
+            else:
+                mensaje = str(resultado)
+                carpeta = None
+                stats = {}
+
+            self.last_result = {
+                "script_name": nombre_script,
+                "message": mensaje,
+                "output_dir": carpeta,
+                "stats": stats,
+            }
+
+            self._call_ui(self.status_bar.set_status, mensaje)
+            self._call_ui(self.status_bar.set_state, "success")
+
+            if carpeta:
+                self._call_ui(self.status_bar.enable_open_button, carpeta)
+
+        def on_error(error_payload=None):
+            if isinstance(error_payload, dict):
+                mensaje = error_payload.get("user_message") or "Error durante ejecución"
+                log_file = error_payload.get("log_file")
+            else:
+                mensaje = error_payload or "Error durante ejecución"
+                log_file = None
+
+            self.last_result = {
+                "script_name": nombre_script,
+                "message": mensaje,
+                "output_dir": None,
+                "stats": {},
+            }
+
+            def _mostrar_error():
+                show_error_dialog(
+                    parent=self,
+                    user_message=mensaje,
+                    log_file=log_file,
+                )
+
+            self._call_ui(_mostrar_error)
+
+            status = mensaje.split("\n", 1)[0]
+            if len(status) > 80:
+                status = status[:77] + "..."
+            self._call_ui(self.status_bar.set_status, f"Error: {status}")
+            self._call_ui(self.status_bar.set_state, "error")
+
+        def on_finally():
+            self._call_ui(self.config, cursor="")
+            self._call_ui(self.status_bar.reset_progress)
+            self._call_ui(self.status_bar.reset_timer)
+            self._call_ui(self._bloquear_tabs, False)
+            self._call_ui(setattr, self, "_ejecutando", False)
+
+        self.runner.run(
+            funcion=funcion,
+            progress=progreso,
+            is_cancelled=cancelado,
+            on_success=on_success,
+            on_error=on_error,
+            on_finally=on_finally,
         )
 
 

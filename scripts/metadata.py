@@ -6,7 +6,7 @@ REQUIRED_FIELDS = {
     "category"
 }
 
-VALID_CATEGORIES = {"PDF", "EML", "MBOX"}
+VALID_CATEGORIES = {"PDF", "EML", "MBOX", "ARCHIVOS"}
 
 OPTIONAL_FIELDS = {
     "description",

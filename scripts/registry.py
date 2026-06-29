@@ -25,6 +25,8 @@ from scripts.mbox import (
     mbox_a_eml,
 )
 
+from scripts.files import renombrar_archivos
+
 from scripts.metadata import extract_metadata
 
 
@@ -59,7 +61,13 @@ SCRIPTS = {
         "MBOX a EML": mbox_a_eml,
         "Extraer adjuntos de MBOX": extraer_con_adjuntos,
 
-    }
+    },
+
+    "ARCHIVOS": {
+
+        "Renombrar archivos": renombrar_archivos,
+
+    },
 
 }
 
