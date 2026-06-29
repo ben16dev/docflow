@@ -116,7 +116,7 @@ class App(tk.Tk):
 
     def _crear_cabecera(self):
         """Cabecera compacta con logo centrado sobre las pestañas."""
-        LOGO_H = 48
+        LOGO_H = 65
 
         header = tk.Frame(self.main_container, bg=TOP_BG)
         header.pack(fill="x", side="top")
@@ -136,7 +136,7 @@ class App(tk.Tk):
                 bg=TOP_BG,
                 bd=0,
                 highlightthickness=0,
-            ).pack(pady=(9, 9))
+            ).pack(pady=(7, 7))
         except Exception as exc:
             logger.warning(f"No se pudo cargar assets/logo.png: {exc}")
 
