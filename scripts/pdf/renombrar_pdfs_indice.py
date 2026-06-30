@@ -127,11 +127,27 @@ def _leer_indice_word(ruta_word: Path):
     return entradas
 
 
-def _buscar_pdf_por_numero(carpeta: Path, numero: str):
+def _indexar_pdfs_por_prefijo(carpeta: Path, prefijos):
+    """
+    Un solo pase sobre la carpeta: mapa prefijo -> Path y lista de PDFs.
+    Conserva el criterio original (primer PDF en orden de iterdir por prefijo).
+    """
+    pdfs = []
+    indice = {}
+    prefijos_pendientes = set(prefijos)
+
     for f in carpeta.iterdir():
-        if f.suffix.lower() == ".pdf" and f.name.startswith(numero):
-            return f
-    return None
+        if f.suffix.lower() != ".pdf":
+            continue
+        pdfs.append(f)
+        if not prefijos_pendientes:
+            continue
+        for prefijo in list(prefijos_pendientes):
+            if f.name.startswith(prefijo):
+                indice[prefijo] = f
+                prefijos_pendientes.discard(prefijo)
+
+    return indice, pdfs
 
 
 # ======================================================
@@ -169,10 +185,10 @@ def run(progress=None, is_cancelled=None):
     }
     encontrados = {}
 
-    pdfs_en_carpeta = [
-        f.name for f in carpeta_base.iterdir()
-        if f.suffix.lower() == ".pdf"
-    ]
+    indice_pdfs, pdfs_en_carpeta = _indexar_pdfs_por_prefijo(
+        carpeta_base,
+        esperados.keys(),
+    )
 
     total = len(esperados)
     procesados = 0
@@ -191,7 +207,7 @@ def run(progress=None, is_cancelled=None):
                 progress(i, total)
 
             try:
-                pdf = _buscar_pdf_por_numero(carpeta_base, num)
+                pdf = indice_pdfs.get(num)
                 if not pdf:
                     continue
 
@@ -236,9 +252,10 @@ def run(progress=None, is_cancelled=None):
         if num not in encontrados
     ]
 
+    pdfs_usados = set(indice_pdfs.values())
     sobrantes = [
-        f for f in pdfs_en_carpeta
-        if not any(f.startswith(num) for num in esperados)
+        f.name for f in pdfs_en_carpeta
+        if f not in pdfs_usados
     ]
 
     mensaje = [f"PDFs generados: {procesados}"]
