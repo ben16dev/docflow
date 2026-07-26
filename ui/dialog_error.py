@@ -43,15 +43,24 @@ def show_error_dialog(parent, user_message: str, log_file: str | None = None) ->
         anchor="w",
     ).pack(fill="x")
 
+    text_frame = tk.Frame(frame, bg=FRAME_BG)
+    text_frame.pack(fill="both", expand=True, pady=(4, 10))
+
+    scrollbar = tk.Scrollbar(text_frame, orient="vertical")
+    scrollbar.pack(side="right", fill="y")
+
     text_message = tk.Text(
-        frame,
+        text_frame,
         height=6,
         wrap="word",
         font=("Segoe UI", 10),
         relief="sunken",
         bd=1,
+        yscrollcommand=scrollbar.set,
     )
-    text_message.pack(fill="both", expand=True, pady=(4, 10))
+    text_message.pack(side="left", fill="both", expand=True)
+    scrollbar.config(command=text_message.yview)
+
     text_message.insert("1.0", user_message or "Error desconocido.")
     text_message.config(state="disabled")
 

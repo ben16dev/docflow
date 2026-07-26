@@ -1,5 +1,4 @@
-import pytest
-
+from core.errors import format_user_error
 from core.script_runner import ScriptRunner
 from ui.exceptions import CancelledByUser
 
@@ -42,18 +41,94 @@ def test_runner_passes_user_message_and_log_file(monkeypatch):
 
 
 def test_format_user_error_for_permission_error():
-    from core.errors import format_user_error
-
     message = format_user_error(PermissionError("denied"))
     assert "permisos" in message.lower()
 
 
-def test_format_user_error_generic_exception():
-    from core.errors import format_user_error
+def test_format_user_error_for_file_not_found():
+    message = format_user_error(FileNotFoundError("missing"))
+    assert "no se encontró" in message.lower()
 
+
+def test_format_user_error_for_oserror_with_message():
+    message = format_user_error(OSError("dispositivo ocupado"))
+    assert "sistema de archivos" in message.lower()
+    assert "dispositivo ocupado" in message
+
+
+def test_format_user_error_for_oserror_without_message():
+    message = format_user_error(OSError(""))
+    assert message == "Error de acceso al sistema de archivos."
+
+
+def test_format_user_error_for_empty_runtime_error():
+    message = format_user_error(RuntimeError(""))
+    assert "inesperado" in message.lower()
+
+
+def test_format_user_error_generic_exception():
     message = format_user_error(ValueError("detalle interno"))
     assert "inesperado" in message.lower()
     assert "detalle interno" not in message
+
+
+def test_runner_permission_error_end_to_end(monkeypatch):
+    logged = []
+    monkeypatch.setattr(
+        "core.script_runner.logger.error",
+        lambda msg: logged.append(msg),
+    )
+
+    captured = []
+    finished = {"done": False}
+
+    runner = ScriptRunner()
+    runner.run(
+        funcion=lambda **kwargs: (_ for _ in ()).throw(PermissionError("denied")),
+        progress=None,
+        is_cancelled=None,
+        on_success=lambda result: None,
+        on_error=lambda payload: captured.append(payload),
+        on_finally=lambda: finished.__setitem__("done", True),
+    )
+    runner._thread.join(timeout=5)
+
+    assert finished["done"] is True
+    assert len(captured) == 1
+    assert "permisos" in captured[0]["user_message"].lower()
+    assert captured[0]["log_file"]
+    assert any("Traceback" in entry for entry in logged)
+
+
+def test_runner_generic_exception_hides_internal_detail(monkeypatch):
+    logged = []
+    monkeypatch.setattr(
+        "core.script_runner.logger.error",
+        lambda msg: logged.append(msg),
+    )
+
+    captured = []
+    finished = {"done": False}
+    internal = "secreto-interno-no-visible"
+
+    runner = ScriptRunner()
+    runner.run(
+        funcion=lambda **kwargs: (_ for _ in ()).throw(ValueError(internal)),
+        progress=None,
+        is_cancelled=None,
+        on_success=lambda result: None,
+        on_error=lambda payload: captured.append(payload),
+        on_finally=lambda: finished.__setitem__("done", True),
+    )
+    runner._thread.join(timeout=5)
+
+    assert finished["done"] is True
+    assert len(captured) == 1
+    assert "inesperado" in captured[0]["user_message"].lower()
+    assert internal not in captured[0]["user_message"]
+    assert captured[0]["log_file"]
+    assert any("Traceback" in entry for entry in logged)
+    assert any(internal in entry for entry in logged)
 
 
 def test_runner_calls_on_cancelled_not_success_or_error():

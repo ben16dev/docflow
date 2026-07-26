@@ -62,3 +62,5 @@ Ejecutar antes de generar builds:
 ```bash
 python -m pytest tests
 ```
+
+Checklist de regresión y validación manual: ver [TESTING.md](TESTING.md).

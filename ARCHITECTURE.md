@@ -46,9 +46,6 @@ DocFlow/
 ├── tests/
 │   └── tests automatizados
 │
-├── logs/
-│   └── archivos de log generados en ejecución
-│
 ├── dist/
 │   └── builds generadas
 │
@@ -179,6 +176,9 @@ Los logs deben registrar información técnica suficiente, pero no contenido sen
 ---
 
 # Logs
+
+Los logs de ejecución se guardan en una ubicación local del usuario,
+dependiente de la plataforma (no dentro del repositorio del proyecto).
 
 Los logs deben servir para depurar errores reales.
 
