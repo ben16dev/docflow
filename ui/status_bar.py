@@ -3,6 +3,7 @@ from tkinter import ttk
 from pathlib import Path
 import time
 import platform
+import sys
 
 from scripts.registry import get_scripts
 from utils.platform_open import open_path
@@ -132,6 +133,7 @@ class StatusBar(tk.Frame):
             activebackground="#d63f10",
             activeforeground="white",
             relief="raised",
+            state="disabled",
             command=self._cancelar
         )
         self.btn_cancel.pack(side="right", padx=(10, 0), pady=(4, 4))
@@ -256,7 +258,20 @@ class StatusBar(tk.Frame):
     # CANCEL
     # ==================================================
 
+    def enable_cancel_button(self):
+        self.btn_cancel.config(state="normal")
+
+    def disable_cancel_button(self):
+        self.btn_cancel.config(state="disabled")
+
     def _cancelar(self):
+        if str(self.btn_cancel["state"]) != "normal":
+            return
+
+        # Deshabilitar de inmediato evita solicitudes de cancelación repetidas
+        # mientras el proceso en curso todavía coopera con is_cancelled().
+        self.disable_cancel_button()
+
         if callable(self.cancel_callback):
             self.cancel_callback()
 

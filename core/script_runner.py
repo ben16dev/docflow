@@ -14,9 +14,14 @@ class ScriptRunner:
     def __init__(self):
         self._thread = None
 
-    def run(self, funcion, progress, is_cancelled, on_success, on_error, on_finally):
+    def run(self, funcion, progress, is_cancelled, on_success, on_error, on_finally,
+            on_cancelled=None):
         """
         Ejecuta un script en segundo plano.
+
+        on_cancelled es opcional: si no se proporciona, una cancelación se
+        notifica a través de on_success (comportamiento previo), para no
+        romper llamadores existentes que no distingan ambos casos.
         """
 
         def tarea():
@@ -30,11 +35,15 @@ class ScriptRunner:
 
             except CancelledByUser:
                 logger.info("[ScriptRunner] Cancelado por usuario")
-                on_success({
+                resultado_cancelado = {
                     "message": "Cancelado",
                     "output_dir": None,
                     "stats": {}
-                })
+                }
+                if callable(on_cancelled):
+                    on_cancelled(resultado_cancelado)
+                else:
+                    on_success(resultado_cancelado)
 
             except Exception as exc:
                 error_text = traceback.format_exc()

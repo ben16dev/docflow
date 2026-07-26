@@ -219,7 +219,6 @@ class App(tk.Tk):
     def _cancelar(self):
         self._cancelado = True
         self.status_bar.set_status("Cancelando…")
-        self.status_bar.set_state("error")
 
     def _bloquear_tabs(self, bloquear=True):
         state = "disabled" if bloquear else "normal"
@@ -384,6 +383,7 @@ class App(tk.Tk):
         self.status_bar.disable_open_button()
         self.status_bar.set_status(f"Ejecutando: {nombre_script}")
         self.status_bar.set_state("running")
+        self.status_bar.enable_cancel_button()
         self._bloquear_tabs(True)
 
         def progreso(actual, total):
@@ -445,10 +445,22 @@ class App(tk.Tk):
             self._call_ui(self.status_bar.set_status, f"Error: {status}")
             self._call_ui(self.status_bar.set_state, "error")
 
+        def on_cancelled(resultado=None):
+            self.last_result = {
+                "script_name": nombre_script,
+                "message": "Cancelado",
+                "output_dir": None,
+                "stats": (resultado or {}).get("stats", {}) if isinstance(resultado, dict) else {},
+            }
+
+            self._call_ui(self.status_bar.set_status, "Cancelado")
+            self._call_ui(self.status_bar.set_state, "cancelado")
+
         def on_finally():
             self._call_ui(self.config, cursor="")
             self._call_ui(self.status_bar.reset_progress)
             self._call_ui(self.status_bar.reset_timer)
+            self._call_ui(self.status_bar.disable_cancel_button)
             self._call_ui(self._bloquear_tabs, False)
             self._call_ui(setattr, self, "_ejecutando", False)
 
@@ -458,6 +470,7 @@ class App(tk.Tk):
             is_cancelled=cancelado,
             on_success=on_success,
             on_error=on_error,
+            on_cancelled=on_cancelled,
             on_finally=on_finally
         )
 
@@ -489,6 +502,7 @@ class App(tk.Tk):
         self.status_bar.disable_open_button()
         self.status_bar.set_status(f"Ejecutando: {nombre_script}")
         self.status_bar.set_state("running")
+        self.status_bar.enable_cancel_button()
         self._bloquear_tabs(True)
 
         def progreso(actual, total):
@@ -550,10 +564,22 @@ class App(tk.Tk):
             self._call_ui(self.status_bar.set_status, f"Error: {status}")
             self._call_ui(self.status_bar.set_state, "error")
 
+        def on_cancelled(resultado=None):
+            self.last_result = {
+                "script_name": nombre_script,
+                "message": "Cancelado",
+                "output_dir": None,
+                "stats": (resultado or {}).get("stats", {}) if isinstance(resultado, dict) else {},
+            }
+
+            self._call_ui(self.status_bar.set_status, "Cancelado")
+            self._call_ui(self.status_bar.set_state, "cancelado")
+
         def on_finally():
             self._call_ui(self.config, cursor="")
             self._call_ui(self.status_bar.reset_progress)
             self._call_ui(self.status_bar.reset_timer)
+            self._call_ui(self.status_bar.disable_cancel_button)
             self._call_ui(self._bloquear_tabs, False)
             self._call_ui(setattr, self, "_ejecutando", False)
 
@@ -563,6 +589,7 @@ class App(tk.Tk):
             is_cancelled=cancelado,
             on_success=on_success,
             on_error=on_error,
+            on_cancelled=on_cancelled,
             on_finally=on_finally,
         )
 
