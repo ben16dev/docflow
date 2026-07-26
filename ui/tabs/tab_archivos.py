@@ -6,16 +6,25 @@ Flujo de tres pasos:
   Paso 1 (Sprint 2): Selección, visualización y gestión de la lista.
   Paso 2 (Sprint 3): Introducción de nuevos nombres (TXT o pegado).
   Paso 3 (Sprint 4): Previsualización y validación completa.
-  Sprint 5:          Ejecución real y resumen.
+  Sprint 5:          Ejecución real (modo COPIAR_A_CARPETA) y resumen.
 
 La sesión (SesionRenombrado) es compartida entre los tres paneles a través
 del ControladorFlujo, que también gestiona la navegación entre pasos.
+
+Esta pestaña se limita a recopilar la selección del usuario (archivos,
+nombres, carpeta destino) y a delegar la ejecución real en
+scripts.files.renombrar_archivos.run() a través de app._ejecutar_herramienta.
+No contiene operaciones de filesystem ni lógica de copia: eso vive en
+scripts/files/rename_executor.py.
 """
 
+import functools
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from scripts.common.rename_models import ModoRenombrado
+from scripts.files import renombrar_archivos
 from scripts.files.preview_logic import construir_preview
 from scripts.files.session import SesionRenombrado
 from ui.styles import (
@@ -815,12 +824,26 @@ class _PanelPrevisualizacion(tk.Frame):
     # --------------------------------------------------
 
     def _cmd_ejecutar(self) -> None:
-        messagebox.showinfo(
-            "Ejecutar renombrado",
-            "La ejecución real del renombrado llegará en el Sprint 5.\n\n"
-            "Todos los cambios validados están listos para aplicarse.",
+        """
+        Solicita la carpeta destino y delega la ejecución real.
+
+        Esta pestaña no realiza ninguna operación de filesystem: se limita
+        a guardar la carpeta destino y el modo en la sesión, y a pedirle
+        a la aplicación que ejecute scripts.files.renombrar_archivos.run()
+        en segundo plano a través de app._ejecutar_herramienta.
+        """
+        carpeta_str = filedialog.askdirectory(
+            title="Selecciona la carpeta de destino",
             parent=self._app,
         )
+        if not carpeta_str:
+            return
+
+        self._sesion.establecer_carpeta_destino(Path(carpeta_str))
+        self._sesion.establecer_modo(ModoRenombrado.COPIAR_A_CARPETA)
+
+        funcion = functools.partial(renombrar_archivos.run, sesion=self._sesion)
+        self._app._ejecutar_herramienta(funcion, action="Renombrar archivos")
 
     # --------------------------------------------------
     # ACTUALIZACIÓN DE LA VISTA

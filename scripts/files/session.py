@@ -15,9 +15,9 @@ Diseñado para ser testeable sin dependencias de UI ni de disco.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
-from scripts.common.rename_models import ArchivoEntrada
+from scripts.common.rename_models import ArchivoEntrada, ModoRenombrado
 
 
 class SesionRenombrado:
@@ -32,6 +32,8 @@ class SesionRenombrado:
     def __init__(self) -> None:
         self._archivos: List[ArchivoEntrada] = []
         self._nombres: List[str] = []
+        self._carpeta_destino: Optional[Path] = None
+        self._modo: ModoRenombrado = ModoRenombrado.COPIAR_A_CARPETA
 
     # --------------------------------------------------
     # MUTACIONES
@@ -141,3 +143,23 @@ class SesionRenombrado:
     def nombres(self) -> List[str]:
         """Devuelve la lista de nuevos nombres en el orden almacenado."""
         return list(self._nombres)
+
+    def establecer_carpeta_destino(self, carpeta: Optional[Path]) -> None:
+        """
+        Guarda la carpeta destino elegida por el usuario para la ejecución.
+
+        Pasar None limpia la carpeta destino previamente establecida.
+        """
+        self._carpeta_destino = Path(carpeta) if carpeta else None
+
+    def carpeta_destino(self) -> Optional[Path]:
+        """Devuelve la carpeta destino configurada, o None si no se ha elegido."""
+        return self._carpeta_destino
+
+    def establecer_modo(self, modo: ModoRenombrado) -> None:
+        """Guarda el modo de operación elegido para la ejecución."""
+        self._modo = modo
+
+    def modo(self) -> ModoRenombrado:
+        """Devuelve el modo de operación configurado (por defecto: copiar)."""
+        return self._modo

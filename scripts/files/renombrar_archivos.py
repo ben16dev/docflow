@@ -3,34 +3,36 @@ Renombrar archivos — DocFlow
 
 Herramienta general para renombrado masivo de archivos de cualquier tipo.
 
-Flujo completo (sprints futuros):
-  1. Selección de archivos (cualquier tipo y extensión)
-  2. Visualización y gestión de la lista (eliminar, limpiar, reordenar)
-  3. Introducción de nuevos nombres (vía TXT o pegado directo)
-  4. Validaciones preventivas
-  5. Previsualización de cambios
-  6. Elección de modo (por defecto: copiar a nueva carpeta)
-  7. Confirmación
-  8. Ejecución
-  9. Resumen final
+Flujo completo:
+  1. Selección de archivos (cualquier tipo y extensión).
+  2. Visualización y gestión de la lista (eliminar, limpiar, reordenar).
+  3. Introducción de nuevos nombres (vía TXT o pegado directo).
+  4. Previsualización y validación.
+  5. Elección de carpeta destino y ejecución real (modo COPIAR_A_CARPETA).
+  6. Resumen final.
 
 Restricciones de producto:
   - La extensión original siempre se conserva.
-  - El modo por defecto es COPIAR_A_CARPETA (nunca modifica originales).
-  - Nunca se permite sobrescribir archivos existentes.
-  - La ejecución se bloquea si se detectan conflictos.
+  - El único modo implementado es COPIAR_A_CARPETA: nunca modifica ni
+    borra los archivos originales.
+  - Nunca se permite sobrescribir archivos existentes en destino.
+  - La ejecución se bloquea si se detectan conflictos en la previsualización.
 
-Estado actual: Sprint 2
-  La pestaña "Archivos" tiene panel de selección funcional.
-  Los archivos se gestionan a través de SesionRenombrado (session.py).
-  La ejecución real se implementará en sprints sucesivos.
+Sprint 5: este módulo es el único punto real de ejecución. `run()` no
+contiene lógica de copia: construye la operación a partir de la sesión
+inyectada por la pestaña "Archivos" y delega el trabajo de disco en
+scripts.files.rename_executor. Aquí solo se adapta el resultado interno
+al contrato `build_result` que ya conocen ScriptRunner y ui/app.py.
 """
 
-import tkinter as tk
-from tkinter import messagebox
+from __future__ import annotations
 
-from ui.ui_thread import call_ui
+from pathlib import Path
+
 from scripts.common.results import build_result
+from scripts.files.preview_logic import construir_entradas
+from scripts.files.rename_executor import ResultadoEjecucion, ejecutar_renombrado
+from scripts.common.rename_models import OperacionRenombrado
 
 # ======================================================
 # METADATOS
@@ -40,11 +42,11 @@ SCRIPT_META = {
     "name": "Renombrar archivos",
     "category": "ARCHIVOS",
     "description": (
-        "Renombrado masivo de archivos de cualquier tipo. "
-        "Los nuevos nombres pueden introducirse desde un fichero TXT "
-        "o pegarse directamente. La extensión original siempre se conserva."
+        "Renombrado masivo de archivos de cualquier tipo mediante copia a una "
+        "carpeta destino. La extensión original siempre se conserva y los "
+        "archivos originales nunca se modifican."
     ),
-    "version": "0.2.0",
+    "version": "0.5.0",
     "author": "DocFlow",
 }
 
@@ -53,28 +55,72 @@ SCRIPT_META = {
 # RUN
 # ======================================================
 
-def run(progress=None, is_cancelled=None):
+def run(progress=None, is_cancelled=None, sesion=None):
     """
-    Punto de entrada del renombrador de archivos.
+    Punto de entrada real del renombrador de archivos.
 
-    Sprint 1 — Esqueleto:
-      Muestra un aviso informativo. La lógica real se implementa
-      en sprints posteriores siguiendo el flujo diseñado.
+    'sesion' es una SesionRenombrado inyectada por tab_archivos.py (ver
+    _PanelPrevisualizacion._cmd_ejecutar) con archivos, nombres y carpeta
+    destino ya establecidos. ScriptRunner invoca esta función únicamente
+    con los kwargs 'progress' e 'is_cancelled'; 'sesion' llega ligada de
+    antemano mediante functools.partial, sin alterar el contrato de
+    ScriptRunner.
     """
-    parent = call_ui(lambda: tk._get_default_root())
+    if sesion is None:
+        raise RuntimeError("No hay una sesión de renombrado activa.")
 
-    call_ui(lambda: messagebox.showinfo(
-        "Renombrar archivos — Próximamente",
-        "Esta herramienta está en desarrollo.\n\n"
-        "En la próxima versión podrás:\n"
-        "  • Seleccionar archivos de cualquier tipo\n"
-        "  • Introducir nuevos nombres desde TXT o pegado\n"
-        "  • Previsualizar los cambios antes de aplicarlos\n"
-        "  • Ejecutar el renombrado de forma segura",
-        parent=parent,
-    ))
+    carpeta_destino = sesion.carpeta_destino()
+    if not carpeta_destino:
+        raise RuntimeError("No se ha seleccionado una carpeta de destino.")
 
-    return build_result(
-        message="Herramienta en desarrollo — Sprint 1",
-        output_dir=None,
+    entradas = construir_entradas(sesion.archivos(), sesion.nombres())
+    operacion = OperacionRenombrado(
+        entradas=entradas,
+        carpeta_destino=Path(carpeta_destino),
+        modo=sesion.modo(),
     )
+
+    resultado = ejecutar_renombrado(
+        operacion,
+        progress=progress,
+        is_cancelled=is_cancelled,
+    )
+
+    return _adaptar_a_build_result(resultado)
+
+
+# ======================================================
+# ADAPTACIÓN AL CONTRATO build_result
+# ======================================================
+
+def _adaptar_a_build_result(resultado: ResultadoEjecucion) -> dict:
+    """
+    Traduce el resultado estructurado interno del ejecutor al contrato
+    estándar de `build_result`, sin que el resto de la aplicación
+    (ScriptRunner, StatusBar, ui/app.py) necesite conocer ResultadoEjecucion.
+    """
+    return build_result(
+        message=_construir_mensaje(resultado),
+        output_dir=resultado.carpeta_destino,
+        total=resultado.total,
+        procesados=resultado.procesados,
+        errores=resultado.errores,
+        omitidos=resultado.omitidos,
+        copiados=resultado.copiados,
+        cancelado=resultado.cancelado,
+        incidencias=list(resultado.incidencias),
+    )
+
+
+def _construir_mensaje(resultado: ResultadoEjecucion) -> str:
+    if resultado.cancelado:
+        return "Cancelado"
+
+    if resultado.errores or resultado.omitidos:
+        return (
+            f"Renombrado finalizado con incidencias — "
+            f"copiados: {resultado.copiados}, omitidos: {resultado.omitidos}, "
+            f"errores: {resultado.errores}"
+        )
+
+    return f"Renombrado completado — {resultado.copiados} archivo(s) copiado(s)"
