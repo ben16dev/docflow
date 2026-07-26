@@ -2,124 +2,229 @@
 
 # Proyecto: DocFlow
 
-DocFlow es una aplicación de escritorio para automatización y gestión documental orientada a despachos de abogados, empresas y departamentos administrativos.
+## Misión
 
-La aplicación trabaja de forma completamente local. Ningún documento debe salir del equipo del usuario.
+DocFlow es una aplicación de escritorio para automatización y gestión documental destinada a despachos de abogados, empresas y departamentos administrativos.
 
-Objetivos del producto:
-- Automatizar tareas documentales repetitivas.
-- Mantener una interfaz simple y profesional.
-- Priorizar la estabilidad sobre las nuevas funcionalidades.
-- Ser multiplataforma:
-  - macOS
-  - Windows
-  - Linux
+La aplicación es **Local First**.
+
+Los documentos del usuario nunca deben abandonar su ordenador para realizar las funciones principales de la aplicación.
+
+Antes de responder o implementar cualquier cambio, leer siempre:
+
+1. CURSOR.md
+2. ARCHITECTURE.md
+
+No asumir arquitectura ni comportamiento sin revisar estos documentos.
+
+---
+
+# Prioridad absoluta
+
+Siempre priorizar, en este orden:
+
+1. Estabilidad
+2. Mantenibilidad
+3. Privacidad
+4. Compatibilidad multiplataforma
+5. Rendimiento
+6. Nuevas funcionalidades
+
+Si existe conflicto entre nuevas funcionalidades y estabilidad, elegir siempre la estabilidad.
 
 ---
 
-# Principios fundamentales
+# Optimización de Cursor
 
-1. Local First
-Toda la ejecución se realiza en el ordenador del usuario.
+El objetivo es minimizar consumo de contexto y de modelos sin reducir la calidad.
 
-Nunca:
-- enviar documentos a servicios externos;
-- incorporar APIs en la nube para procesar archivos;
-- requerir conexión a Internet para funciones principales.
+## Regla 1
 
-2. Simplicidad
-La aplicación está dirigida a usuarios no técnicos.
+No explorar el repositorio completo salvo petición expresa.
 
-Toda nueva funcionalidad debe:
-- requerir el menor número de pasos posible;
-- ser intuitiva;
-- tener mensajes de error claros.
-
-3. Estabilidad antes que nuevas funciones
-No introducir cambios que puedan romper funcionalidades existentes.
-
-Antes de modificar:
-- analizar dependencias;
-- revisar flujos afectados;
-- mantener compatibilidad hacia atrás.
-
-4. Código mantenible
-Priorizar:
-- claridad;
-- modularidad;
-- bajo acoplamiento;
-- funciones pequeñas.
-
-Evitar:
-- duplicidad;
-- funciones gigantes;
-- lógica mezclada entre UI y negocio.
+Nunca recorrer directorios completos "por si acaso".
 
 ---
-## Optimización de consumo de API
 
-* Priorizar cambios pequeños e incrementales.
-* Analizar antes de modificar.
-* Limitar la edición a los archivos estrictamente necesarios.
-* Evitar exploraciones completas del repositorio salvo necesidad justificada.
-* No realizar refactors fuera del alcance solicitado.
-* Ejecutar únicamente las pruebas necesarias para validar el cambio.
-* Preferir varias iteraciones pequeñas frente a una implementación masiva.
-* Usar Agent solo cuando deban modificarse archivos; utilizar Ask para análisis y planificación.
+## Regla 2
 
-## Uso eficiente de modelos en Cursor
+Antes de modificar código:
 
-Usar Auto o Ask para análisis, planificación, revisión de informes y documentación.
-Usar Agent con un modelo potente solo cuando sea necesario modificar archivos, depurar errores complejos, tocar UI, arquitectura, validadores, tests o empaquetado.
-Antes de usar Agent, acotar archivos, objetivo y verificación.
-Evitar agentes largos, refactors amplios y exploraciones completas del repositorio salvo necesidad justificada.
+- explicar el objetivo;
+- indicar el modo recomendado;
+- indicar el modelo recomendado;
+- listar únicamente los archivos necesarios.
+
+Formato:
+
+Objetivo:
+Modo:
+Modelo:
+Archivos afectados:
+
+---
+
+## Regla 3
+
+No abrir archivos adicionales salvo necesidad justificada.
+
+Si la ubicación del código es desconocida:
+
+- realizar una búsqueda mínima;
+- detener la exploración cuando se identifiquen los archivos relevantes.
+
+---
+
+## Regla 4
+
+No realizar refactors fuera del alcance solicitado.
+
+Si detectas mejoras adicionales:
+
+- indicarlas;
+- no implementarlas.
+
+---
+
+## Regla 5
+
+Implementar siempre el cambio mínimo viable.
+
+Preferir:
+
+- varias mejoras pequeñas;
+- varias conversaciones;
+
+antes que una modificación masiva.
+
+---
+
+## Regla 6
+
+Antes de usar Agent, comprobar si la tarea puede resolverse con Edit.
+
+Prioridad:
+
+Ask
+↓
+
+Edit
+↓
+
+Agent
+
+Agent solo debe utilizarse cuando exista una razón objetiva.
+
+---
+
+# Política de modelos
+
+## Uso diario
+
+Preferir:
+
+- Auto
+- Composer Fast
+- Sonnet
+
+## Uso avanzado
+
+Utilizar GPT-5.5 únicamente para:
+
+- arquitectura;
+- bugs difíciles;
+- revisiones complejas;
+- decisiones de diseño.
+
+## Thinking
+
+Usar modelos Thinking únicamente cuando se solicite expresamente o la tarea requiera razonamiento profundo.
+
+---
+
+# Filosofía del proyecto
+
+DocFlow debe ser:
+
+- Local First.
+- Multiplataforma.
+- Modular.
+- Profesional.
+- Fácil de mantener.
+- Robusto.
+- Predecible.
+
+Nunca incorporar dependencias cloud para funciones principales.
+
+Nunca enviar documentos del usuario a servicios externos.
+
+---
 
 # Arquitectura
 
-Separación obligatoria:
+Respetar siempre la separación entre:
 
-## Capa de interfaz
+## UI
+
 Responsable únicamente de:
-- mostrar información;
-- recoger acciones del usuario.
 
-Nunca debe contener:
-- lógica de negocio compleja;
-- manipulación directa de archivos.
+- interacción;
+- presentación;
+- mensajes.
 
-## Capa de negocio
-Responsable de:
-- validaciones;
-- reglas de procesamiento;
-- orquestación de herramientas.
-
-## Capa de infraestructura
-Responsable de:
-- sistema de archivos;
-- conversión de documentos;
-- apertura de programas;
-- generación de PDFs.
+Nunca contener lógica documental.
 
 ---
 
-# Principios de desarrollo
+## Negocio
+
+Responsable de:
+
+- validaciones;
+- reglas;
+- coordinación.
+
+---
+
+## Servicios
+
+Responsables de:
+
+- PDF;
+- EML;
+- MBOX;
+- renombrado;
+- conversión;
+- apertura de programas.
+
+---
+
+## Utilidades
+
+Responsables de:
+
+- logging;
+- rutas;
+- helpers;
+- funciones reutilizables.
+
+---
+
+# Principios de implementación
 
 Antes de implementar:
 
-1. Explicar:
-- objetivo;
-- archivos afectados;
-- riesgos.
+1. explicar el problema;
+2. explicar la solución;
+3. indicar archivos afectados;
+4. indicar riesgos;
+5. indicar validación.
 
-2. Implementar el cambio mínimo viable.
+Después:
 
-3. No realizar refactors no solicitados.
-
-4. No cambiar nombres, rutas o APIs públicas salvo indicación expresa.
-
-5. Si existen varias alternativas:
-- proponerlas;
-- recomendar una.
+- implementar únicamente lo solicitado;
+- no modificar APIs públicas;
+- no cambiar nombres sin autorización.
 
 ---
 
@@ -127,84 +232,108 @@ Antes de implementar:
 
 Todos los errores deben:
 
-- registrarse en el log;
-- mostrar un mensaje comprensible al usuario;
-- evitar cierres inesperados.
+- registrarse;
+- ser comprensibles para el usuario;
+- permitir recuperación.
 
-Nunca usar:
+Nunca utilizar:
 
-```python
 except:
     pass
 
-Siempre capturar excepciones específicas.
+Capturar siempre excepciones específicas.
 
-Logs
+---
 
-Los logs deben:
+# Logs
 
-ser útiles para depuración;
-incluir contexto suficiente;
-evitar información innecesaria.
+Los logs deben contener:
 
-No registrar:
+- fecha;
+- operación;
+- herramienta;
+- error;
+- contexto técnico.
 
-contenido de documentos;
-datos personales completos;
-información sensible.
-Interfaz
+Nunca registrar:
 
-La interfaz debe ser:
+- contenido documental;
+- datos personales innecesarios.
 
-limpia;
-profesional;
-consistente;
-pensada para despachos y empresas.
+---
 
-Evitar:
+# Compatibilidad
 
-ventanas innecesarias;
-diálogos redundantes;
-configuraciones complejas.
-Compatibilidad
+Todo cambio debe considerar:
 
-Toda modificación debe considerar:
+- macOS;
+- Windows;
+- Linux.
 
-macOS
-Windows
-Linux
+Las diferencias de plataforma deben aislarse en utilidades específicas.
 
-No introducir código específico de una plataforma sin contemplar las demás.
+---
 
-Testing
+# Testing
 
 Toda mejora debe indicar:
 
-pruebas manuales necesarias;
-posibles regresiones;
-tests automatizados que deben ejecutarse.
+- pruebas manuales;
+- posibles regresiones;
+- tests afectados.
 
-Cuando sea posible:
+Ejecutar únicamente las pruebas necesarias.
 
-añadir tests;
-no romper la suite existente.
-Política de cambios
+No lanzar la suite completa salvo que el cambio lo justifique.
 
-Antes de cada implementación, responder:
+---
 
-Qué problema se resuelve.
-Qué archivos se modifican.
-Qué riesgos existen.
-Cómo se valida.
-Cómo se revierte.
-Filosofía de DocFlow
+# Exclusiones
 
-DocFlow es una herramienta profesional de automatización documental:
+No utilizar como contexto salvo petición expresa:
 
-rápida;
-robusta;
-privada;
-multiplataforma;
-mantenible a largo plazo.
+- dist/
+- build/
+- release/
+- logs/
+- .venv/
+- __pycache__/
+- node_modules/
+- coverage/
+- artefactos generados
+- iconos compilados
+- imágenes
+- instaladores
 
-En caso de conflicto entre nuevas funcionalidades y estabilidad, elegir siempre la estabilidad.
+Estas exclusiones deben mantenerse también en `.cursorignore`.
+
+---
+
+# Política de cambios
+
+Cada implementación debe responder:
+
+- Qué problema resuelve.
+- Qué archivos modifica.
+- Qué riesgos existen.
+- Cómo se valida.
+- Cómo se revierte.
+
+---
+
+# Filosofía final
+
+Cada cambio debe acercar DocFlow a ser:
+
+- más estable;
+- más simple;
+- más privado;
+- más mantenible;
+- más profesional.
+
+No sacrificar estos principios para introducir funcionalidades de valor limitado.
+
+---
+
+Versión: CURSOR Rules v2.0
+Última revisión: 2026-07-05

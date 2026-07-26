@@ -18,7 +18,14 @@ from tkinter import filedialog, messagebox, ttk
 
 from scripts.files.preview_logic import construir_preview
 from scripts.files.session import SesionRenombrado
-from ui.styles import FRAME_BG, TITLE_FG
+from ui.styles import (
+    BTN_BG,
+    BTN_BG_HOVER,
+    BTN_FG,
+    BTN_FG_DISABLED,
+    FRAME_BG,
+    TITLE_FG,
+)
 
 
 # ======================================================
@@ -773,11 +780,12 @@ class _PanelPrevisualizacion(tk.Frame):
             text="Ejecutar renombrado",
             command=self._cmd_ejecutar,
             state="disabled",
-            bg="#1f4e79",
-            fg="white",
-            activebackground="#2f6fa3",
-            activeforeground="white",
-            disabledforeground="#aaaaaa",
+            bg=BTN_BG,
+            fg=BTN_FG,
+            activebackground=BTN_BG_HOVER,
+            activeforeground=BTN_FG,
+            disabledforeground=BTN_FG_DISABLED,
+            highlightbackground=BTN_BG,
             font=("Segoe UI", 10, "bold"),
             padx=20,
             pady=8,
@@ -849,11 +857,11 @@ class _PanelPrevisualizacion(tk.Frame):
 
     def _on_enter_ejecutar(self, _event=None) -> None:
         if self._btn_ejecutar["state"] == "normal":
-            self._btn_ejecutar.config(bg="#2f6fa3")
+            self._btn_ejecutar.config(bg=BTN_BG_HOVER)
 
     def _on_leave_ejecutar(self, _event=None) -> None:
         if self._btn_ejecutar["state"] == "normal":
-            self._btn_ejecutar.config(bg="#1f4e79")
+            self._btn_ejecutar.config(bg=BTN_BG)
 
 
 # ======================================================
