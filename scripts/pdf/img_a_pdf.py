@@ -1,6 +1,6 @@
 SCRIPT_META = {
     "name": "Imagen a PDF",
-    "category": "PDF"
+    "category": "CONVERSIÓN"
 }
 
 from pathlib import Path

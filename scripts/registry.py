@@ -44,7 +44,6 @@ SCRIPTS = {
         "Unir PDFs por orden manual": unir_pdfs_orden,
         "Renombrar PDFs por índice": renombrar_pdfs_indice,
         "Censurar PDF por palabras": censurar_pdf_por_palabras,
-        "Imagen a PDF": img_a_pdf,
         "Limpiar numeración PDF": limpiar_numeracion_pdf,
         "Optimizar PDF": optimizar_pdf,
 
@@ -66,6 +65,12 @@ SCRIPTS = {
     "ARCHIVOS": {
 
         "Renombrar archivos": renombrar_archivos,
+
+    },
+
+    "CONVERSIÓN": {
+
+        "Imagen a PDF": img_a_pdf,
 
     },
 

@@ -30,7 +30,6 @@ def build_tab(tab, app):
     help_frame.pack(fill="x", padx=30, pady=(20, 15))
 
     ayudas = [
-        "▶ Imágenes a PDF\nConvierte PNG/JPG en PDF.",
         "▶ Numerar páginas PDF\nEstampa identificadores configurables.",
         "▶ Censurar PDF\nCensura visual por palabras.",
         "▶ Renombrar por índice\nUsa un Word como índice.",

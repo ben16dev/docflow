@@ -178,7 +178,7 @@ class StatusBar(tk.Frame):
         total = 0
 
         # Scripts cargados
-        for tab in ["PDF", "EML", "MBOX"]:
+        for tab in ["PDF", "EML", "MBOX", "CONVERSIÓN"]:
 
             scripts = get_scripts(tab)
 

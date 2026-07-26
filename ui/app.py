@@ -21,6 +21,7 @@ from ui.tabs.tab_mbox import build_tab as build_tab_mbox
 from ui.tabs.tab_eml import build_tab as build_tab_eml
 from ui.tabs.tab_pdf import build_tab as build_tab_pdf
 from ui.tabs.tab_archivos import build_tab as build_tab_archivos
+from ui.tabs.tab_conversion import build_tab as build_tab_conversion
 
 from ui.dialog_error import show_error_dialog
 from ui.status_bar import StatusBar
@@ -162,6 +163,7 @@ class App(tk.Tk):
         self.tab_eml = ttk.Frame(self.notebook)
         self.tab_pdf = ttk.Frame(self.notebook)
         self.tab_archivos = ttk.Frame(self.notebook)
+        self.tab_conversion = ttk.Frame(self.notebook)
 
         try:
             self.icon_mbox = self._load_icon(resource_path("ui/icons/mbox.png"), (16, 16))
@@ -187,17 +189,20 @@ class App(tk.Tk):
                 compound="left"
             )
             self.notebook.add(self.tab_archivos, text="Archivos")
+            self.notebook.add(self.tab_conversion, text="Conversión")
 
         except Exception:
             self.notebook.add(self.tab_mbox, text="MBOX")
             self.notebook.add(self.tab_eml, text="EML")
             self.notebook.add(self.tab_pdf, text="PDF")
             self.notebook.add(self.tab_archivos, text="Archivos")
+            self.notebook.add(self.tab_conversion, text="Conversión")
 
         build_tab_mbox(self.tab_mbox, self)
         build_tab_eml(self.tab_eml, self)
         build_tab_pdf(self.tab_pdf, self)
         build_tab_archivos(self.tab_archivos, self)
+        build_tab_conversion(self.tab_conversion, self)
 
     def _seleccionar_carpeta(self):
         ruta = filedialog.askdirectory(parent=self)
