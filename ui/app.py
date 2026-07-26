@@ -46,8 +46,9 @@ class App(tk.Tk):
         self._configurar_icono()
 
         self.title(f"{APP_NAME} — {APP_VERSION}")
-        self.minsize(950, 920)
         self.geometry("1200x800")
+        self.minsize(950, 650)
+        self.resizable(True, True)
 
         self._cancelado = False
         self._ejecutando = False
