@@ -15,13 +15,23 @@
 # PDF - lectura, escritura, manipulación
 pypdf==5.1.0
 PyMuPDF==1.25.1
-pdfplumber==0.11.4
+# 0.11.10 alinea pdfminer.six==20260107 con ocrmypdf 17.8.1
+# (0.11.4 exigía pdfminer.six==20231228 y conflictuaba).
+pdfplumber==0.11.10
 
 # PDF - generación (reportes, watermarks, correos a PDF)
 reportlab==4.2.5
 
 # Imágenes
-Pillow==11.0.0
+# Pillow 12.x requerido por ocrmypdf 17.8.1 y pdfplumber 0.11.10
+Pillow==12.3.0
+
+# OCR — PDF escaneado → PDF con capa de texto (sin Ghostscript)
+ocrmypdf==17.8.1
+pypdfium2==5.12.1
+# Dependencias transitivas críticas pinneadas para instalación reproducible
+pikepdf==10.10.0
+pdfminer.six==20260107
 
 # Office
 openpyxl==3.1.5
