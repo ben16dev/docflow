@@ -73,7 +73,7 @@ def test_build_command_contains_base_flags(tmp_path):
     out = tmp_path / "out.pdf"
     inp.write_bytes(b"%PDF-1.4")
     cmd = build_ocr_command(inp, out, ocrmypdf_bin=Path("/fake/ocrmypdf"))
-    assert cmd[0] == "/fake/ocrmypdf"
+    assert Path(cmd[0]) == Path("/fake/ocrmypdf")
     assert "--language" in cmd and "spa" in cmd
     assert "--output-type" in cmd and "pdf" in cmd
     assert "--optimize" in cmd and "0" in cmd
@@ -506,8 +506,8 @@ def test_build_subprocess_env_does_not_mutate_os_environ():
     tess = MagicMock(path=Path("/opt/homebrew/bin/tesseract"), origin=MagicMock())
     td = MagicMock(path=Path("/opt/homebrew/share/tessdata"), origin=MagicMock())
     env = build_subprocess_env(tesseract=tess, tessdata=td, base_environ={"PATH": "/bin"})
-    assert env["TESSDATA_PREFIX"] == "/opt/homebrew/share/tessdata"
-    assert env["PATH"].startswith("/opt/homebrew/bin")
+    assert Path(env["TESSDATA_PREFIX"]) == Path("/opt/homebrew/share/tessdata")
+    assert Path(env["PATH"].split(os.pathsep)[0]) == Path("/opt/homebrew/bin")
     assert dict(os.environ) == before
     assert os.environ.get("TESSDATA_PREFIX") == before.get("TESSDATA_PREFIX")
 
