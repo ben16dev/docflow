@@ -226,6 +226,7 @@ def promote_temp_to_final(temp_path: Path, final_path: Path) -> Path:
     Promueve el temporal al nombre final con replace atómico en el mismo volumen.
 
     Si final_path ya existiera (condición de carrera), se resuelve colisión.
+    Verifica que el archivo final exista tras el replace.
     """
     temp_path = Path(temp_path)
     final_path = Path(final_path)
@@ -238,6 +239,37 @@ def promote_temp_to_final(temp_path: Path, final_path: Path) -> Path:
 
     final_path.parent.mkdir(parents=True, exist_ok=True)
     os.replace(temp_path, final_path)
+
+    if not final_path.is_file():
+        raise OcrValidationError(
+            "missing_promoted_output",
+            "El OCR terminó, pero no se encontró el archivo final tras la promoción.",
+        )
+
+    return final_path
+
+
+def assert_final_in_destination(final_path: Path, output_dir: Path) -> Path:
+    """
+    Postcondición: el PDF final existe y pertenece a la carpeta de destino.
+    """
+    final_path = Path(final_path)
+    output_dir = Path(output_dir)
+
+    if not final_path.is_file():
+        raise OcrValidationError(
+            "missing_promoted_output",
+            "El OCR terminó, pero no se encontró el archivo final.",
+        )
+
+    try:
+        final_path.resolve().relative_to(output_dir.resolve())
+    except ValueError as exc:
+        raise OcrValidationError(
+            "output_outside_destination",
+            "El archivo OCR se generó fuera de la carpeta de destino.",
+        ) from exc
+
     return final_path
 
 

@@ -1,7 +1,7 @@
 """
 OCR de PDFs escaneados → PDF con capa de texto (OCRmyPDF + Tesseract).
 
-Herramienta documental independiente. Aún no registrada en la UI.
+Herramienta documental independiente. Registrada en la pestaña CONVERSIÓN.
 """
 
 SCRIPT_META = {
@@ -20,6 +20,7 @@ from ui.exceptions import CancelledByUser
 
 from scripts.common.ocr_io import (
     OcrValidationError,
+    assert_final_in_destination,
     make_temp_pdf_path,
     promote_temp_to_final,
     resolve_output_path,
@@ -348,6 +349,7 @@ def process_one_pdf(
 
     temp_path = make_temp_pdf_path(output_dir, input_pdf.stem)
     final_path = resolve_output_path(output_dir, input_pdf.name)
+    promoted: Optional[Path] = None
 
     try:
         cmd = build_ocr_command(input_pdf, temp_path, ocrmypdf_bin=ocrmypdf_bin)
@@ -370,18 +372,23 @@ def process_one_pdf(
             )
 
         promoted = promote_temp_to_final(temp_path, final_path)
+        promoted = assert_final_in_destination(promoted, output_dir)
         logger.info(
-            "[OCR-PDF] Promovido OK pages=%s size_bytes=%s",
+            "[OCR-PDF] Promovido OK pages=%s size_bytes=%s "
+            "final_exists=True final_in_destination=True",
             validation.page_count_output,
             validation.size_bytes,
         )
         return promoted
 
     except CancelledByUser:
-        safe_unlink(temp_path)
+        if promoted is None:
+            safe_unlink(temp_path)
         raise
     except Exception:
-        safe_unlink(temp_path)
+        # No borrar un final ya promovido: solo el temporal si sigue existiendo.
+        if promoted is None:
+            safe_unlink(temp_path)
         raise
 
 
@@ -420,6 +427,7 @@ def run(
     total = len(pdfs)
     procesados = 0
     errores = 0
+    files: list[Path] = []
 
     if progress:
         progress(0, total)
@@ -445,14 +453,22 @@ def run(
         _check_cancelled(is_cancelled)
 
         try:
-            process_one_pdf(
+            final_path = process_one_pdf(
                 pdf,
                 dest,
                 is_cancelled=is_cancelled,
                 env=env,
                 ocrmypdf_bin=ocrmypdf.path,
             )
+            final_path = assert_final_in_destination(final_path, dest)
+            files.append(final_path)
             procesados += 1
+            logger.info(
+                "[OCR-PDF] Aceptado index=%s/%s final_exists=True "
+                "final_in_destination=True",
+                index,
+                total,
+            )
         except CancelledByUser:
             logger.info(
                 "[OCR-PDF] Cancelado index=%s/%s procesados=%s",
@@ -482,20 +498,59 @@ def run(
         if progress:
             progress(index, total)
 
+    # Solo rutas que siguen existiendo en destino.
+    files = [
+        p for p in files
+        if p.is_file()
+        and _path_is_relative_to(p.resolve(), dest.resolve())
+    ]
+    if len(files) != procesados:
+        logger.error(
+            "[OCR-PDF] Discrepancia category=files_missing "
+            "procesados=%s finales=%s",
+            procesados,
+            len(files),
+        )
+        errores += procesados - len(files)
+        procesados = len(files)
+
     logger.info(
-        "[OCR-PDF] Finalizado procesados=%s errores=%s total=%s",
+        "[OCR-PDF] Finalizado procesados=%s errores=%s total=%s finales=%s",
         procesados,
         errores,
         total,
+        len(files),
     )
 
+    if total > 0 and procesados == 0:
+        raise RuntimeError(
+            f"No se pudo generar ningún PDF OCR ({errores} error(es))."
+        )
+
+    if errores > 0:
+        message = (
+            f"Proceso finalizado con errores: {procesados} procesado(s), "
+            f"{errores} con error."
+        )
+    else:
+        message = "Proceso finalizado"
+
     return build_result(
-        message="Proceso finalizado",
+        message=message,
         output_dir=dest,
         total=total,
         procesados=procesados,
         errores=errores,
+        files=files,
     )
+
+
+def _path_is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
 
 
 if __name__ == "__main__":

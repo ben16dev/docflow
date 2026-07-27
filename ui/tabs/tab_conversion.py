@@ -8,6 +8,12 @@ from ui.styles import FRAME_BG
 
 from scripts.registry import get_scripts
 
+# Herramientas que eligen archivos y destino en sus propios diálogos
+# y no dependen de la carpeta de trabajo de la pestaña.
+_SELF_CONTAINED_TOOLS = {
+    "PDF escaneado a PDF OCR",
+}
+
 
 def build_tab(tab, app):
     frame = tk.Frame(tab, bg=FRAME_BG)
@@ -17,6 +23,8 @@ def build_tab(tab, app):
         frame,
         "Ayuda – Conversión",
         "▶ Imagen a PDF: Convierte imágenes PNG y JPG en un archivo PDF.\n"
+        "▶ PDF escaneado a PDF OCR: Añade capa de texto a PDFs escaneados "
+        "(elige PDF y carpeta destino; no requiere carpeta de trabajo).\n"
     )
 
     create_route_frame(frame, app.var_ruta, app._seleccionar_carpeta)
@@ -38,11 +46,16 @@ def build_tab(tab, app):
         if funcion is None:
             continue
 
+        if texto in _SELF_CONTAINED_TOOLS:
+            executor = app._ejecutar_herramienta
+        else:
+            executor = app._ejecutar
+
         btn = create_corporate_button(
             buttons_frame,
             app,
             texto,
-            lambda f=funcion, a=texto: app._ejecutar(
+            lambda f=funcion, a=texto, ex=executor: ex(
                 f,
                 tab="CONVERSIÓN",
                 action=a

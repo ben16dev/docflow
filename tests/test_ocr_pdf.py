@@ -174,6 +174,9 @@ def test_run_accepts_multiple_pdfs(tmp_path, monkeypatch):
     assert calls["n"] == 3
     assert result["stats"]["total"] == 3
     assert result["stats"]["procesados"] == 3
+    assert result["stats"]["procesados"] == len(result["files"])
+    assert all(Path(f).is_file() for f in result["files"])
+    assert all(Path(f).parent == dest for f in result["files"])
     assert progress_log[0] == (0, 3)
     assert progress_log[-1] == (3, 3)
 
@@ -511,3 +514,193 @@ def test_build_subprocess_env_does_not_mutate_os_environ():
 
 def test_safe_unlink_missing():
     safe_unlink(Path("/tmp/docflow_no_existe_xyz.pdf"))
+
+
+# ---------------------------------------------------------------------------
+# Regresión: procesados ↔ archivo final en destino
+# ---------------------------------------------------------------------------
+
+
+def _mock_runtime(monkeypatch):
+    monkeypatch.setattr(
+        ocr_pdf,
+        "require_runtime",
+        lambda: (
+            MagicMock(path=Path("ocrmypdf"), origin=MagicMock(value="system")),
+            MagicMock(path=Path("tesseract"), origin=MagicMock(value="system")),
+            MagicMock(path=Path("tessdata"), origin=MagicMock(value="system")),
+        ),
+    )
+    monkeypatch.setattr(ocr_pdf, "build_subprocess_env", lambda **kw: {})
+
+
+def _fake_ocr_copy(input_pdf, temp_output, **kwargs):
+    """Mock de OCR: copia un PDF válido al temporal esperado."""
+    shutil.copy(input_pdf, temp_output)
+    return 0, 0.01
+
+
+def test_process_one_pdf_returns_existing_file_in_destination(tmp_path, monkeypatch):
+    original = tmp_path / "entrada.pdf"
+    _write_minimal_pdf(original, "DocFlow destino")
+    dest = tmp_path / "salida"
+    dest.mkdir()
+    monkeypatch.setattr(ocr_pdf, "run_ocrmypdf_process", _fake_ocr_copy)
+
+    returned = ocr_pdf.process_one_pdf(original, dest)
+
+    assert returned.is_file()
+    assert returned.parent == dest
+    assert returned.name == "entrada_ocr.pdf"
+    assert list(dest.glob(".docflow_ocr_*")) == []
+    assert list(dest.glob("*_ocr.pdf")) == [returned]
+
+
+def test_run_with_mocked_ocr_writes_exactly_one_final(tmp_path, monkeypatch):
+    original = tmp_path / "doc.pdf"
+    _write_minimal_pdf(original, "DocFlow lote")
+    dest = tmp_path / "out"
+    dest.mkdir()
+    _mock_runtime(monkeypatch)
+    monkeypatch.setattr(ocr_pdf, "run_ocrmypdf_process", _fake_ocr_copy)
+
+    result = ocr_pdf.run(pdf_paths=[original], output_dir=dest)
+
+    assert result["stats"]["procesados"] == 1
+    assert result["stats"]["errores"] == 0
+    assert len(result["files"]) == 1
+    final = Path(result["files"][0])
+    assert final.is_file()
+    assert final.parent == dest
+    assert final.name == "doc_ocr.pdf"
+    assert sorted(p.name for p in dest.iterdir()) == ["doc_ocr.pdf"]
+    assert result["stats"]["procesados"] == len(result["files"])
+
+
+def test_run_does_not_count_missing_returned_path(tmp_path, monkeypatch):
+    pdf = tmp_path / "a.pdf"
+    _write_minimal_pdf(pdf)
+    dest = tmp_path / "out"
+    dest.mkdir()
+    _mock_runtime(monkeypatch)
+
+    def ghost_process(input_pdf, output_dir, **kwargs):
+        return output_dir / "no_existe_ocr.pdf"
+
+    monkeypatch.setattr(ocr_pdf, "process_one_pdf", ghost_process)
+
+    with pytest.raises(RuntimeError, match="No se pudo generar ningún PDF OCR"):
+        ocr_pdf.run(pdf_paths=[pdf], output_dir=dest)
+
+    assert list(dest.iterdir()) == []
+
+
+def test_run_rejects_path_outside_destination(tmp_path, monkeypatch):
+    pdf = tmp_path / "a.pdf"
+    _write_minimal_pdf(pdf)
+    dest = tmp_path / "out"
+    dest.mkdir()
+    outsider = tmp_path / "fuera_ocr.pdf"
+    outsider.write_bytes(b"%PDF-1.4")
+    _mock_runtime(monkeypatch)
+
+    def outside_process(input_pdf, output_dir, **kwargs):
+        return outsider
+
+    monkeypatch.setattr(ocr_pdf, "process_one_pdf", outside_process)
+
+    with pytest.raises(RuntimeError, match="No se pudo generar ningún PDF OCR"):
+        ocr_pdf.run(pdf_paths=[pdf], output_dir=dest)
+
+    assert not (dest / "fuera_ocr.pdf").exists()
+    assert outsider.is_file()
+
+
+def test_run_files_only_existing_and_in_destination(tmp_path, monkeypatch):
+    pdfs = []
+    for name in ("ok.pdf", "bad.pdf"):
+        p = tmp_path / name
+        _write_minimal_pdf(p, name)
+        pdfs.append(p)
+    dest = tmp_path / "out"
+    dest.mkdir()
+    _mock_runtime(monkeypatch)
+
+    def selective(input_pdf, output_dir, **kwargs):
+        if input_pdf.name == "bad.pdf":
+            raise ocr_pdf.OcrProcessError("ocr_failed", "fallo", returncode=1)
+        out = output_dir / f"{input_pdf.stem}_ocr.pdf"
+        out.write_bytes(b"%PDF-1.4 ok")
+        return out
+
+    monkeypatch.setattr(ocr_pdf, "process_one_pdf", selective)
+
+    result = ocr_pdf.run(pdf_paths=pdfs, output_dir=dest)
+
+    assert result["stats"]["procesados"] == 1
+    assert result["stats"]["errores"] == 1
+    assert result["stats"]["procesados"] == len(result["files"])
+    assert all(Path(f).is_file() for f in result["files"])
+    assert all(Path(f).parent.resolve() == dest.resolve() for f in result["files"])
+    assert "con error" in result["message"]
+    assert list(dest.glob("*_ocr.pdf")) == [Path(result["files"][0])]
+
+
+def test_run_all_failures_raise_not_empty_success(tmp_path, monkeypatch):
+    pdf = tmp_path / "a.pdf"
+    _write_minimal_pdf(pdf)
+    dest = tmp_path / "out"
+    dest.mkdir()
+    _mock_runtime(monkeypatch)
+
+    def boom(input_pdf, output_dir, **kwargs):
+        raise ocr_pdf.OcrProcessError("ocr_failed", "fallo", returncode=1)
+
+    monkeypatch.setattr(ocr_pdf, "process_one_pdf", boom)
+
+    with pytest.raises(RuntimeError, match="No se pudo generar ningún PDF OCR"):
+        ocr_pdf.run(pdf_paths=[pdf], output_dir=dest)
+
+
+def test_collision_still_generates_v2(tmp_path, monkeypatch):
+    original = tmp_path / "informe.pdf"
+    _write_minimal_pdf(original, "DocFlow v2")
+    dest = tmp_path / "out"
+    dest.mkdir()
+    existing = dest / "informe_ocr.pdf"
+    existing.write_bytes(b"%PDF-1.4 old")
+    monkeypatch.setattr(ocr_pdf, "run_ocrmypdf_process", _fake_ocr_copy)
+
+    returned = ocr_pdf.process_one_pdf(original, dest)
+
+    assert returned.name == "informe_ocr_v2.pdf"
+    assert returned.is_file()
+    assert existing.is_file()
+    assert existing.read_bytes() == b"%PDF-1.4 old"
+
+
+def test_promote_does_not_delete_final_on_later_failure(tmp_path, monkeypatch):
+    """Si tras promover falla una postcondición, el final no se borra."""
+    original = tmp_path / "x.pdf"
+    _write_minimal_pdf(original, "DocFlow keep")
+    dest = tmp_path / "out"
+    dest.mkdir()
+    monkeypatch.setattr(ocr_pdf, "run_ocrmypdf_process", _fake_ocr_copy)
+
+    def always_fail(final_path, output_dir):
+        assert Path(final_path).is_file()
+        raise ocr_pdf.OcrValidationError(
+            "output_outside_destination",
+            "El archivo OCR se generó fuera de la carpeta de destino.",
+        )
+
+    monkeypatch.setattr(ocr_pdf, "assert_final_in_destination", always_fail)
+
+    with pytest.raises(ocr_pdf.OcrValidationError) as excinfo:
+        ocr_pdf.process_one_pdf(original, dest)
+
+    assert excinfo.value.category == "output_outside_destination"
+    finals = list(dest.glob("*_ocr.pdf"))
+    assert len(finals) == 1
+    assert finals[0].is_file()
+    assert list(dest.glob(".docflow_ocr_*")) == []

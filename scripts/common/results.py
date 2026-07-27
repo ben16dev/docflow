@@ -9,6 +9,7 @@ def build_result(
     procesados: int = 0,
     errores: int = 0,
     omitidos: Optional[int] = None,
+    files: Optional[list] = None,
     **extra_stats: Any
 ) -> Dict[str, Any]:
     """
@@ -18,7 +19,8 @@ def build_result(
     {
         "message": str,
         "output_dir": str | None,
-        "stats": {...}
+        "stats": {...},
+        "files": [str, ...]   # opcional; solo rutas de archivos existentes
     }
     """
 
@@ -37,11 +39,16 @@ def build_result(
 
     stats.update(extra_stats)
 
-    return {
+    result: Dict[str, Any] = {
         "message": message,
         "output_dir": str(output_dir) if output_dir else None,
         "stats": stats,
     }
+
+    if files is not None:
+        result["files"] = [str(f) for f in files]
+
+    return result
 
 
 def build_cancelled_result(

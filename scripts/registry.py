@@ -11,6 +11,7 @@ from scripts.pdf import (
     extraer_paginas_pdf,
     img_a_pdf,
     numerar_doc_pdf,
+    ocr_pdf,
     renombrar_pdfs_indice,
     rotar_paginas_pdf,
     unir_pdfs_orden,
@@ -71,6 +72,7 @@ SCRIPTS = {
     "CONVERSIÓN": {
 
         "Imagen a PDF": img_a_pdf,
+        "PDF escaneado a PDF OCR": ocr_pdf,
 
     },
 

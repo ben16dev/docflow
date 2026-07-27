@@ -482,7 +482,8 @@ class App(tk.Tk):
         la herramienta es responsable de pedir al usuario los archivos
         que necesita a través de sus propios diálogos.
 
-        Uso previsto para las herramientas de la pestaña "Archivos".
+        Uso previsto para herramientas que gestionan su propia selección
+        (p. ej. pestaña Archivos y OCR en Conversión).
         """
         if self._ejecutando:
             return

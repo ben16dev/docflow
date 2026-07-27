@@ -57,3 +57,16 @@ def test_build_cancelled_result():
     assert result["stats"]["procesados"] == 2
     assert result["stats"]["errores"] == 1
     assert result["stats"]["omitidos"] == 2
+
+
+def test_build_result_with_files():
+    result = build_result(
+        message="OK",
+        output_dir="/tmp/out",
+        total=1,
+        procesados=1,
+        errores=0,
+        files=["/tmp/out/a_ocr.pdf"],
+    )
+    assert result["files"] == ["/tmp/out/a_ocr.pdf"]
+    assert "files" not in result["stats"]

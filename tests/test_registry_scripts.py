@@ -1,5 +1,5 @@
 from scripts.metadata import VALID_CATEGORIES, extract_metadata
-from scripts.pdf import img_a_pdf
+from scripts.pdf import img_a_pdf, ocr_pdf
 from scripts.registry import get_scripts
 
 
@@ -29,6 +29,13 @@ def test_imagen_a_pdf_moved_to_conversion():
     assert conversion_scripts["Imagen a PDF"] is img_a_pdf
 
 
+def test_ocr_pdf_registered_in_conversion():
+    conversion_scripts = get_scripts("CONVERSIÓN")
+    assert "PDF escaneado a PDF OCR" in conversion_scripts
+    assert conversion_scripts["PDF escaneado a PDF OCR"] is ocr_pdf
+    assert "PDF escaneado a PDF OCR" not in get_scripts("PDF")
+
+
 def test_conversion_category_is_valid():
     assert "CONVERSIÓN" in VALID_CATEGORIES
 
@@ -37,3 +44,9 @@ def test_img_a_pdf_metadata_category():
     meta = extract_metadata(img_a_pdf)
     assert meta["category"] == "CONVERSIÓN"
     assert meta["name"] == "Imagen a PDF"
+
+
+def test_ocr_pdf_metadata_category():
+    meta = extract_metadata(ocr_pdf)
+    assert meta["category"] == "CONVERSIÓN"
+    assert meta["name"] == "PDF escaneado a PDF OCR"
