@@ -62,14 +62,34 @@ STATE_ERROR = ACTION_CANCEL
 STATE_CANCELLED = "#B45309"
 
 # =============================================================================
-# TIPOGRAFÍA (tamaños; la familia se resuelve por plataforma en fases posteriores)
+# TIPOGRAFÍA
+# Preferencia tipográfica UI. Tk sustituye si la familia no está instalada;
+# no se garantiza la misma cara en macOS, Windows y Linux.
+# TkFixedFont / Courier son alias genéricos seguros para monoespaciado.
 # =============================================================================
+
+FONT_FAMILY_UI = "Segoe UI"
+FONT_FAMILY_MONO = "TkFixedFont"
 
 FONT_SIZE_XS = 8
 FONT_SIZE_SM = 9
 FONT_SIZE_MD = 10
 FONT_SIZE_LG = 11
 FONT_SIZE_XL = 13
+
+
+def font_ui(size, *styles):
+    """Tupla tipográfica UI: (familia, tamaño[, estilo...])."""
+    if styles:
+        return (FONT_FAMILY_UI, size) + tuple(styles)
+    return (FONT_FAMILY_UI, size)
+
+
+def font_mono(size, *styles):
+    """Tupla tipográfica monoespaciada genérica de Tk."""
+    if styles:
+        return (FONT_FAMILY_MONO, size) + tuple(styles)
+    return (FONT_FAMILY_MONO, size)
 
 # =============================================================================
 # ESPACIADOS BÁSICOS
@@ -130,6 +150,91 @@ CARD_MIN_WIDTH = 240
 CARD_WRAPLENGTH = 220
 
 # =============================================================================
+# INDICADOR DE PASOS (StepIndicator)
+# =============================================================================
+
+STEP_PENDING_BG = BACKGROUND_MUTED
+STEP_PENDING_FG = TEXT_DISABLED
+STEP_ACTIVE_BG = PRIMARY_INDIGO
+STEP_ACTIVE_FG = TEXT_ON_PRIMARY
+STEP_COMPLETED_BG = ACCENT_TEAL
+STEP_COMPLETED_FG = TEXT_ON_PRIMARY
+STEP_CONNECTOR = BORDER_DEFAULT
+STEP_LABEL_PENDING_FG = TEXT_SECONDARY
+STEP_LABEL_ACTIVE_FG = PRIMARY_INDIGO
+STEP_LABEL_COMPLETED_FG = ACCENT_TEAL_DARK
+STEP_MARKER_SIZE = 22
+STEP_GAP = SPACE_SM
+
+# =============================================================================
+# TREEVIEW (DocFlow.Treeview)
+# =============================================================================
+
+TREE_BG = BACKGROUND_PANEL
+TREE_FG = TEXT_PRIMARY
+TREE_HEADING_BG = BACKGROUND_MUTED
+TREE_HEADING_FG = TEXT_PRIMARY
+TREE_SELECTED_BG = PRIMARY_INDIGO
+TREE_SELECTED_FG = TEXT_ON_PRIMARY
+TREE_BORDER = BORDER_DEFAULT
+TREE_ROWHEIGHT = 26
+TREE_TAG_OK_FG = ACTION_SUCCESS
+TREE_TAG_CONFLICT_FG = ACTION_CANCEL
+
+# =============================================================================
+# ESTADO VACÍO / AVISOS DE FLUJO
+# =============================================================================
+
+EMPTY_STATE_BG = BACKGROUND_PANEL
+EMPTY_STATE_TITLE_FG = TEXT_PRIMARY
+EMPTY_STATE_HINT_FG = TEXT_SECONDARY
+
+FLOW_NOTICE_SAFE_BG = "#FFFBEB"
+FLOW_NOTICE_SAFE_FG = STATE_CANCELLED
+FLOW_HEADER_TITLE_FG = PRIMARY_INDIGO
+FLOW_HEADER_DESC_FG = TEXT_SECONDARY
+FLOW_SECTION_FG = TEXT_SECONDARY
+FLOW_INFO_FG = TEXT_SECONDARY
+FLOW_SUMMARY_OK_FG = ACTION_SUCCESS
+FLOW_SUMMARY_ERROR_FG = ACTION_CANCEL
+
+# =============================================================================
+# SELECTOR DE RUTAS (create_route_frame)
+# =============================================================================
+
+ROUTE_BG = BACKGROUND_PANEL
+ROUTE_FG = TEXT_PRIMARY
+ROUTE_PLACEHOLDER_FG = TEXT_DISABLED
+ROUTE_BORDER = BORDER_DEFAULT
+ROUTE_BORDER_FOCUS = PRIMARY_INDIGO
+ROUTE_DISABLED_BG = BACKGROUND_MUTED
+ROUTE_DISABLED_FG = TEXT_DISABLED
+ROUTE_INSERT = TEXT_PRIMARY
+
+# =============================================================================
+# PANEL DE AYUDA (create_help_panel)
+# =============================================================================
+
+HELP_PANEL_BG = BACKGROUND_PANEL
+HELP_PANEL_TITLE_FG = PRIMARY_INDIGO
+HELP_PANEL_TEXT_FG = TEXT_SECONDARY
+HELP_PANEL_WRAPLENGTH = 900
+
+# =============================================================================
+# DIÁLOGO GENERAL DE ERROR
+# =============================================================================
+
+ERROR_DIALOG_BG = BACKGROUND_APP
+ERROR_DIALOG_HEADER_FG = ACTION_CANCEL
+ERROR_DIALOG_LABEL_FG = TEXT_PRIMARY
+ERROR_DIALOG_DETAIL_BG = BACKGROUND_PANEL
+ERROR_DIALOG_DETAIL_FG = TEXT_PRIMARY
+ERROR_DIALOG_DETAIL_BORDER = BORDER_DEFAULT
+ERROR_DIALOG_LOG_FG = TEXT_SECONDARY
+ERROR_DIALOG_PADX = SPACE_LG
+ERROR_DIALOG_PADY = SPACE_MD
+
+# =============================================================================
 # ALIASES LEGACY — botones de ejecución (CorporateButton y consumidores actuales)
 # Conservar valores originales hasta migrar variantes en una fase posterior.
 # =============================================================================
@@ -183,6 +288,16 @@ BUTTON_VARIANTS = {
         "hover": BTN_SECONDARY_HOVER,
         "pressed": BTN_SECONDARY_PRESSED,
         "fg": BTN_SECONDARY_FG,
+        "disabled_bg": BTN_SECONDARY_DISABLED_BG,
+        "disabled_fg": BTN_SECONDARY_DISABLED_FG,
+        "focus": BTN_VARIANT_FOCUS,
+    },
+    # Destructiva discreta: superficie neutra, texto de acción cancel/error.
+    "destructive": {
+        "bg": BTN_SECONDARY_BG,
+        "hover": BTN_SECONDARY_HOVER,
+        "pressed": BTN_SECONDARY_PRESSED,
+        "fg": ACTION_CANCEL,
         "disabled_bg": BTN_SECONDARY_DISABLED_BG,
         "disabled_fg": BTN_SECONDARY_DISABLED_FG,
         "focus": BTN_VARIANT_FOCUS,

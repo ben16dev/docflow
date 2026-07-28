@@ -7,7 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.pdf import img_a_pdf, ocr_pdf
-from ui.common import CorporateButton
+from scripts.registry import get_scripts
+from ui.common import ToolCard
 from ui.tabs import tab_conversion
 
 
@@ -32,6 +33,15 @@ def root():
             pass
 
 
+def _collect_tool_cards(widget):
+    cards = []
+    if isinstance(widget, ToolCard):
+        cards.append(widget)
+    for child in widget.winfo_children():
+        cards.extend(_collect_tool_cards(child))
+    return cards
+
+
 def _build_conversion_tab(root):
     """Construye la pestaña con un app mínimo que registra el flujo usado."""
     calls = []
@@ -54,29 +64,35 @@ def _build_conversion_tab(root):
     return tab, calls
 
 
-def _buttons_by_text(tab):
-    found = {}
-    for widget in tab.winfo_children():
-        for child in widget.winfo_children():
-            if isinstance(child, tk.Frame):
-                for btn in child.winfo_children():
-                    if isinstance(btn, CorporateButton):
-                        found[btn.cget("text")] = btn
-    return found
+def _cards_by_title(tab):
+    return {c.cget("title"): c for c in _collect_tool_cards(tab)}
 
 
-def test_ocr_button_visible_in_conversion(root):
+def test_conversion_one_card_per_registered_tool_in_order(root):
     tab, _ = _build_conversion_tab(root)
-    buttons = _buttons_by_text(tab)
-    assert "PDF escaneado a PDF OCR" in buttons
-    assert "Imagen a PDF" in buttons
+    cards = _collect_tool_cards(tab)
+    registered = [
+        name
+        for name, module in get_scripts("CONVERSIÓN").items()
+        if getattr(module, "run", None) is not None
+    ]
+    assert len(cards) == len(registered)
+    assert [c.cget("title") for c in cards] == registered
+    assert all(isinstance(c, ToolCard) for c in cards)
 
 
-def test_ocr_button_uses_herramienta_flow(root):
+def test_ocr_card_visible_in_conversion(root):
+    tab, _ = _build_conversion_tab(root)
+    cards = _cards_by_title(tab)
+    assert "PDF escaneado a PDF OCR" in cards
+    assert "Imagen a PDF" in cards
+
+
+def test_ocr_card_uses_herramienta_flow(root):
     tab, calls = _build_conversion_tab(root)
-    buttons = _buttons_by_text(tab)
+    cards = _cards_by_title(tab)
 
-    buttons["PDF escaneado a PDF OCR"].invoke()
+    cards["PDF escaneado a PDF OCR"].invoke()
 
     assert len(calls) == 1
     flow, funcion, action = calls[0]
@@ -87,9 +103,9 @@ def test_ocr_button_uses_herramienta_flow(root):
 
 def test_img_a_pdf_keeps_ejecutar_flow(root):
     tab, calls = _build_conversion_tab(root)
-    buttons = _buttons_by_text(tab)
+    cards = _cards_by_title(tab)
 
-    buttons["Imagen a PDF"].invoke()
+    cards["Imagen a PDF"].invoke()
 
     assert len(calls) == 1
     flow, funcion, action = calls[0]

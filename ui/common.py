@@ -1,6 +1,8 @@
 import tkinter as tk
+from tkinter import ttk
 
 from ui.styles import (
+    BORDER_DEFAULT,
     BUTTON_VARIANTS,
     CARD_ACCENT,
     CARD_ACCENT_WIDTH,
@@ -19,8 +21,50 @@ from ui.styles import (
     CARD_TITLE_FG,
     CARD_TITLE_GAP,
     CARD_WRAPLENGTH,
+    EMPTY_STATE_BG,
+    EMPTY_STATE_HINT_FG,
+    EMPTY_STATE_TITLE_FG,
+    FONT_SIZE_LG,
     FONT_SIZE_MD,
     FONT_SIZE_SM,
+    FONT_SIZE_XS,
+    HELP_PANEL_BG,
+    HELP_PANEL_TEXT_FG,
+    HELP_PANEL_TITLE_FG,
+    HELP_PANEL_WRAPLENGTH,
+    PAGE_PADX,
+    ROUTE_BG,
+    ROUTE_BORDER,
+    ROUTE_BORDER_FOCUS,
+    ROUTE_DISABLED_BG,
+    ROUTE_DISABLED_FG,
+    ROUTE_FG,
+    ROUTE_INSERT,
+    ROUTE_PLACEHOLDER_FG,
+    SECTION_PADY,
+    SPACE_MD,
+    SPACE_SM,
+    STEP_ACTIVE_BG,
+    STEP_ACTIVE_FG,
+    STEP_COMPLETED_BG,
+    STEP_COMPLETED_FG,
+    STEP_CONNECTOR,
+    STEP_GAP,
+    STEP_LABEL_ACTIVE_FG,
+    STEP_LABEL_COMPLETED_FG,
+    STEP_LABEL_PENDING_FG,
+    STEP_MARKER_SIZE,
+    STEP_PENDING_BG,
+    STEP_PENDING_FG,
+    TREE_BORDER,
+    TREE_FG,
+    TREE_HEADING_BG,
+    TREE_HEADING_FG,
+    TREE_ROWHEIGHT,
+    TREE_SELECTED_BG,
+    TREE_SELECTED_FG,
+    TREE_BG,
+    font_ui,
 )
 
 
@@ -104,7 +148,7 @@ class CorporateButton(tk.Frame):
             "text": text,
             "bg": initial_bg,
             "fg": self._palette["fg"],
-            "font": ("Segoe UI", 10),
+            "font": font_ui(FONT_SIZE_MD),
             "padx": padx,
             "pady": pady,
             "cursor": "hand2",
@@ -386,21 +430,36 @@ def create_corporate_button(
 def create_route_frame(parent, ruta_var, seleccionar_callback):
     PLACEHOLDER = "Selecciona la carpeta de trabajo aquí"
 
-    frame = tk.Frame(parent, bg=parent["bg"])
-    frame.pack(fill="x", padx=30, pady=(10, 20))
+    parent_bg = parent.cget("bg") if hasattr(parent, "cget") else parent["bg"]
+    frame = tk.Frame(parent, bg=parent_bg)
+    frame.pack(fill="x", padx=PAGE_PADX, pady=(SPACE_SM, SECTION_PADY))
 
-    entry = tk.Entry(frame, textvariable=ruta_var)
-    entry.pack(fill="x", pady=(0, 6))
+    entry = tk.Entry(
+        frame,
+        textvariable=ruta_var,
+        bg=ROUTE_BG,
+        fg=ROUTE_FG,
+        insertbackground=ROUTE_INSERT,
+        disabledbackground=ROUTE_DISABLED_BG,
+        disabledforeground=ROUTE_DISABLED_FG,
+        relief="solid",
+        bd=1,
+        highlightthickness=1,
+        highlightbackground=ROUTE_BORDER,
+        highlightcolor=ROUTE_BORDER_FOCUS,
+        font=font_ui(FONT_SIZE_MD),
+    )
+    entry.pack(fill="x", pady=(0, SPACE_SM))
 
     def set_placeholder():
         if not (ruta_var.get() or "").strip():
             ruta_var.set(PLACEHOLDER)
-            entry.config(fg="#777777")
+            entry.config(fg=ROUTE_PLACEHOLDER_FG)
 
     def clear_placeholder(_=None):
         if ruta_var.get() == PLACEHOLDER:
             ruta_var.set("")
-            entry.config(fg="#000000")
+            entry.config(fg=ROUTE_FG)
 
     def on_focus_out(_=None):
         if not (ruta_var.get() or "").strip():
@@ -412,13 +471,23 @@ def create_route_frame(parent, ruta_var, seleccionar_callback):
     if not (ruta_var.get() or "").strip():
         set_placeholder()
     else:
-        entry.config(fg="#000000")
+        entry.config(fg=ROUTE_FG)
 
-    tk.Button(
+    btn = CorporateButton(
         frame,
         text="Seleccionar carpeta",
-        command=seleccionar_callback
-    ).pack(anchor="w")
+        command=seleccionar_callback,
+        variant="secondary",
+        width=None,
+        padx=12,
+        pady=5,
+    )
+    btn.pack(anchor="w")
+
+    # Referencias internas para tests / estado disabled sin cambiar la API pública.
+    frame._route_entry = entry
+    frame._route_button = btn
+    frame._route_placeholder = PLACEHOLDER
 
     return frame
 
@@ -431,25 +500,27 @@ def create_help_panel(parent, title, text):
     frame = tk.LabelFrame(
         parent,
         text=title,
-        bg=parent["bg"],
-        fg="#1f4e79",
-        font=("Segoe UI", 11, "bold"),
-        padx=20,
-        pady=15
+        bg=HELP_PANEL_BG,
+        fg=HELP_PANEL_TITLE_FG,
+        font=font_ui(FONT_SIZE_LG, "bold"),
+        padx=SPACE_MD,
+        pady=SPACE_SM,
     )
-    frame.pack(fill="x", padx=30, pady=(20, 15))
+    frame.pack(fill="x", padx=PAGE_PADX, pady=(SECTION_PADY, SPACE_SM))
 
     label = tk.Label(
         frame,
         text=text,
         justify="left",
         anchor="w",
-        bg=parent["bg"],
-        wraplength=850,
-        font=("Segoe UI", 10),
+        bg=HELP_PANEL_BG,
+        fg=HELP_PANEL_TEXT_FG,
+        wraplength=HELP_PANEL_WRAPLENGTH,
+        font=font_ui(FONT_SIZE_MD),
     )
     label.pack(anchor="w")
 
+    frame._help_label = label
     return frame
 
 
@@ -535,7 +606,7 @@ class ToolCard(tk.Frame):
             text=self._title,
             bg=CARD_BG,
             fg=CARD_TITLE_FG,
-            font=("Segoe UI", FONT_SIZE_MD, "bold"),
+            font=font_ui(FONT_SIZE_MD, "bold"),
             anchor="w",
             justify="left",
             wraplength=self._wraplength,
@@ -553,7 +624,7 @@ class ToolCard(tk.Frame):
             text=self._description,
             bg=CARD_BG,
             fg=CARD_DESC_FG,
-            font=("Segoe UI", FONT_SIZE_SM),
+            font=font_ui(FONT_SIZE_SM),
             anchor="nw",
             justify="left",
             wraplength=self._wraplength,
@@ -855,3 +926,270 @@ def create_tool_card(
     if pack:
         card.pack(fill="both", expand=True, padx=CARD_GAP, pady=CARD_GAP)
     return card
+
+
+# =========================
+# Indicador de pasos (informativo)
+# =========================
+
+class StepIndicator(tk.Frame):
+    """
+    Indicador visual de pasos de un flujo.
+
+    Solo refleja estado (pendiente / activo / completado). No navega
+    ni contiene lógica de negocio.
+    """
+
+    def __init__(self, parent, steps, active=0, bg=None, **kwargs):
+        steps = list(steps)
+        if not steps:
+            raise ValueError("steps debe contener al menos un paso")
+
+        surface = bg if bg is not None else getattr(parent, "cget", lambda _k: None)("bg")
+        if not surface:
+            surface = EMPTY_STATE_BG
+
+        kwargs.pop("bg", None)
+        kwargs.pop("background", None)
+        super().__init__(parent, bg=surface, **kwargs)
+
+        self._steps = steps
+        self._active = 0
+        self._markers = []
+        self._labels = []
+        self._connectors = []
+
+        row = tk.Frame(self, bg=surface)
+        row.pack(fill="x")
+
+        for index, label_text in enumerate(steps):
+            if index > 0:
+                connector = tk.Frame(
+                    row,
+                    bg=STEP_CONNECTOR,
+                    height=2,
+                    width=28,
+                )
+                connector.pack(side="left", padx=(STEP_GAP, STEP_GAP), pady=(0, 14))
+                self._connectors.append(connector)
+
+            col = tk.Frame(row, bg=surface)
+            col.pack(side="left")
+
+            marker = tk.Label(
+                col,
+                text=str(index + 1),
+                width=2,
+                font=font_ui(FONT_SIZE_SM, "bold"),
+                relief="flat",
+                bd=0,
+                padx=4,
+                pady=2,
+            )
+            marker.pack()
+            self._markers.append(marker)
+
+            label = tk.Label(
+                col,
+                text=str(label_text),
+                bg=surface,
+                font=font_ui(FONT_SIZE_XS),
+                pady=2,
+            )
+            label.pack()
+            self._labels.append(label)
+
+        self.set_active(active)
+
+    @property
+    def active(self) -> int:
+        return self._active
+
+    @property
+    def steps(self):
+        return tuple(self._steps)
+
+    def step_state(self, index: int) -> str:
+        if index < 0 or index >= len(self._steps):
+            raise IndexError(f"índice de paso fuera de rango: {index}")
+        if index < self._active:
+            return "completado"
+        if index == self._active:
+            return "activo"
+        return "pendiente"
+
+    def set_active(self, index: int) -> None:
+        if index < 0 or index >= len(self._steps):
+            raise IndexError(f"índice de paso fuera de rango: {index}")
+        self._active = index
+        for i in range(len(self._steps)):
+            state = self.step_state(i)
+            if state == "completado":
+                m_bg, m_fg = STEP_COMPLETED_BG, STEP_COMPLETED_FG
+                l_fg = STEP_LABEL_COMPLETED_FG
+            elif state == "activo":
+                m_bg, m_fg = STEP_ACTIVE_BG, STEP_ACTIVE_FG
+                l_fg = STEP_LABEL_ACTIVE_FG
+            else:
+                m_bg, m_fg = STEP_PENDING_BG, STEP_PENDING_FG
+                l_fg = STEP_LABEL_PENDING_FG
+
+            self._markers[i].configure(
+                text=str(i + 1),
+                bg=m_bg,
+                fg=m_fg,
+                width=2,
+            )
+            self._labels[i].configure(fg=l_fg)
+
+        # Geometría de conectores constante (solo color).
+        for connector in self._connectors:
+            connector.configure(bg=STEP_CONNECTOR, height=2, width=28)
+
+
+# =========================
+# Separador y botones de barra de herramientas
+# =========================
+
+def create_toolbar_separator(parent, bg=None):
+    """Línea vertical discreta entre grupos de acciones."""
+    color = BORDER_DEFAULT if bg is None else bg
+    sep = tk.Frame(parent, width=1, bg=color)
+    sep.pack(side="left", fill="y", padx=SPACE_SM, pady=SPACE_SM)
+    return sep
+
+
+def create_toolbar_button(
+    parent,
+    text,
+    command,
+    variant="secondary",
+    padx=9,
+    pady=4,
+    width=None,
+):
+    """
+    Botón compacto para barras de acciones.
+
+    Variantes: secondary (neutral), destructive (discreta).
+    Reutiliza CorporateButton para apariencia controlada en Aqua.
+    """
+    if variant not in ("secondary", "destructive"):
+        raise ValueError(
+            f'variante de toolbar inválida "{variant}": '
+            'debe ser "secondary" o "destructive"'
+        )
+    return CorporateButton(
+        parent,
+        text=text,
+        command=command,
+        variant=variant,
+        width=width,
+        padx=padx,
+        pady=pady,
+    )
+
+
+def set_widget_state(widget, enabled: bool) -> None:
+    """Habilita o deshabilita un botón (CorporateButton o tk.Button)."""
+    widget.configure(state="normal" if enabled else "disabled")
+
+
+# =========================
+# Estilos Treeview DocFlow
+# =========================
+
+_TREEVIEW_STYLE_READY = False
+
+
+def ensure_docflow_treeview_style(master=None) -> str:
+    """
+    Configura DocFlow.Treeview / DocFlow.Treeview.Heading una sola vez.
+
+    Devuelve el nombre de estilo para pasar a ttk.Treeview(style=...).
+    """
+    global _TREEVIEW_STYLE_READY
+    style = ttk.Style(master)
+    if not _TREEVIEW_STYLE_READY:
+        style.configure(
+            "DocFlow.Treeview",
+            background=TREE_BG,
+            fieldbackground=TREE_BG,
+            foreground=TREE_FG,
+            bordercolor=TREE_BORDER,
+            lightcolor=TREE_BORDER,
+            darkcolor=TREE_BORDER,
+            rowheight=TREE_ROWHEIGHT,
+            font=font_ui(FONT_SIZE_MD),
+        )
+        style.configure(
+            "DocFlow.Treeview.Heading",
+            background=TREE_HEADING_BG,
+            foreground=TREE_HEADING_FG,
+            relief="flat",
+            font=font_ui(FONT_SIZE_SM, "bold"),
+        )
+        style.map(
+            "DocFlow.Treeview",
+            background=[("selected", TREE_SELECTED_BG)],
+            foreground=[("selected", TREE_SELECTED_FG)],
+        )
+        style.map(
+            "DocFlow.Treeview.Heading",
+            background=[("active", TREE_HEADING_BG)],
+            relief=[("active", "flat")],
+        )
+        _TREEVIEW_STYLE_READY = True
+    return "DocFlow.Treeview"
+
+
+# =========================
+# Estado vacío asociado a tablas
+# =========================
+
+class EmptyState(tk.Frame):
+    """Mensaje informativo cuando una lista o tabla no tiene elementos."""
+
+    def __init__(
+        self,
+        parent,
+        title="",
+        hint="",
+        bg=None,
+        **kwargs,
+    ):
+        surface = bg if bg is not None else EMPTY_STATE_BG
+        kwargs.pop("bg", None)
+        super().__init__(parent, bg=surface, **kwargs)
+
+        self._title = tk.Label(
+            self,
+            text=title,
+            bg=surface,
+            fg=EMPTY_STATE_TITLE_FG,
+            font=font_ui(FONT_SIZE_MD, "bold"),
+            justify="center",
+        )
+        self._title.pack(pady=(SPACE_SM, 2))
+
+        self._hint = tk.Label(
+            self,
+            text=hint,
+            bg=surface,
+            fg=EMPTY_STATE_HINT_FG,
+            font=font_ui(FONT_SIZE_SM),
+            justify="center",
+            wraplength=420,
+        )
+        self._hint.pack(pady=(0, SPACE_SM))
+
+    def set_texts(self, title, hint=""):
+        self._title.configure(text=title)
+        self._hint.configure(text=hint)
+
+    def show(self):
+        self.lift()
+        self.grid()
+
+    def hide(self):
+        self.grid_remove()

@@ -5,7 +5,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from ui.common import CorporateButton
 from ui.dialog_error import show_error_dialog
+from ui.styles import (
+    ERROR_DIALOG_BG,
+    ERROR_DIALOG_DETAIL_BG,
+    ERROR_DIALOG_HEADER_FG,
+    ERROR_DIALOG_LOG_FG,
+    PRIMARY_INDIGO,
+)
 
 
 def _make_root():
@@ -48,9 +56,21 @@ def _find_widget(parent, widget_type):
 
 def _find_button(parent, text):
     for child in parent.winfo_children():
+        if isinstance(child, CorporateButton) and str(child.cget("text")) == text:
+            return child
         if isinstance(child, tk.Button) and str(child.cget("text")) == text:
             return child
         found = _find_button(child, text)
+        if found is not None:
+            return found
+    return None
+
+
+def _find_label_with_text(parent, text):
+    for child in parent.winfo_children():
+        if isinstance(child, tk.Label) and str(child.cget("text")) == text:
+            return child
+        found = _find_label_with_text(child, text)
         if found is not None:
             return found
     return None
@@ -158,7 +178,6 @@ def test_dialog_long_message_is_scrollable(root):
         seen["has_first"] = "Línea 1 " in content
         seen["has_last"] = "Línea 40 " in content
 
-        # El contenido completo está en el widget y el scroll vertical responde.
         text.yview_moveto(1.0)
         bottom = text.yview()
         text.yview_moveto(0.0)
@@ -172,3 +191,57 @@ def test_dialog_long_message_is_scrollable(root):
     assert seen["has_first"] is True
     assert seen["has_last"] is True
     assert seen["scrolled"] is True
+
+
+def test_dialog_uses_design_tokens_and_corporate_buttons(root):
+    seen = {}
+
+    def interact():
+        win = _find_toplevel(root)
+        assert win.cget("bg") == ERROR_DIALOG_BG
+        text = _find_widget(win, tk.Text)
+        assert text.cget("bg") == ERROR_DIALOG_DETAIL_BG
+        copiar = _find_button(win, "Copiar mensaje")
+        cerrar = _find_button(win, "Cerrar")
+        assert isinstance(copiar, CorporateButton)
+        assert isinstance(cerrar, CorporateButton)
+        assert copiar.cget("variant") == "secondary"
+        assert cerrar.cget("variant") == "diagnostic"
+        assert cerrar.cget("bg") == PRIMARY_INDIGO
+        header = None
+        for child in win.winfo_children():
+            header = _find_label_with_text(child, "Se ha producido un error")
+            if header is not None:
+                break
+        assert header is not None
+        assert header.cget("fg") == ERROR_DIALOG_HEADER_FG
+        seen["ok"] = True
+        cerrar.invoke()
+
+    _run_dialog(root, "Error visual", None, interact)
+    assert seen["ok"] is True
+
+
+def test_dialog_close_releases_grab(root):
+    def interact():
+        win = _find_toplevel(root)
+        _find_button(win, "Cerrar").invoke()
+
+    _run_dialog(root, "Cierre limpio", None, interact)
+    assert _find_toplevel(root) is None
+
+
+def test_dialog_api_accepts_none_log(root):
+    def interact():
+        win = _find_toplevel(root)
+        assert _find_button(win, "Abrir log") is None
+        log_lbl = None
+        for child in win.winfo_children():
+            log_lbl = _find_label_with_text(child, "Log: no disponible")
+            if log_lbl is not None:
+                break
+        assert log_lbl is not None
+        assert log_lbl.cget("fg") == ERROR_DIALOG_LOG_FG
+        _find_button(win, "Cerrar").invoke()
+
+    _run_dialog(root, "Sin log", None, interact)
