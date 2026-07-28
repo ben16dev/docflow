@@ -1,6 +1,27 @@
 import tkinter as tk
 
-from ui.styles import BUTTON_VARIANTS
+from ui.styles import (
+    BUTTON_VARIANTS,
+    CARD_ACCENT,
+    CARD_ACCENT_WIDTH,
+    CARD_BG,
+    CARD_BORDER,
+    CARD_BORDER_FOCUS,
+    CARD_BORDER_HOVER,
+    CARD_BORDER_PRESSED,
+    CARD_DESC_FG,
+    CARD_DISABLED_BG,
+    CARD_DISABLED_FG,
+    CARD_GAP,
+    CARD_HOVER_BG,
+    CARD_PADX,
+    CARD_PADY,
+    CARD_TITLE_FG,
+    CARD_TITLE_GAP,
+    CARD_WRAPLENGTH,
+    FONT_SIZE_MD,
+    FONT_SIZE_SM,
+)
 
 
 
@@ -430,3 +451,407 @@ def create_help_panel(parent, title, text):
     label.pack(anchor="w")
 
     return frame
+
+
+# =========================
+# Tarjeta de herramienta
+# =========================
+
+class ToolCard(tk.Frame):
+    """
+    Tarjeta activable para lanzar una herramienta DocFlow.
+
+    Toda la superficie responde a clic y teclado (Return/Space).
+    Colores exclusivamente desde tokens CARD_* de ui.styles.
+    """
+
+    def __init__(
+        self,
+        parent,
+        title="",
+        description="",
+        command=None,
+        state="normal",
+        width=None,
+        wraplength=None,
+        **kwargs,
+    ):
+        for key in (
+            "bg",
+            "fg",
+            "background",
+            "foreground",
+            "cursor",
+            "relief",
+            "highlightbackground",
+        ):
+            kwargs.pop(key, None)
+
+        card_width = width
+        self._wraplength = CARD_WRAPLENGTH if wraplength is None else wraplength
+
+        super().__init__(
+            parent,
+            bg=CARD_BG,
+            highlightthickness=2,
+            highlightbackground=CARD_BORDER,
+            highlightcolor=CARD_BORDER_FOCUS,
+            bd=0,
+            relief="flat",
+            cursor="hand2",
+            takefocus=1,
+            **kwargs,
+        )
+
+        self._command = command
+        self._state = "normal"
+        self._hovered = False
+        self._pressed = False
+        self._focused = False
+        self._title = title or ""
+        self._description = description or ""
+
+        body = tk.Frame(self, bg=CARD_BG, cursor="hand2", takefocus=0)
+        body.pack(fill="both", expand=True)
+
+        self._accent = tk.Frame(
+            body,
+            bg=CARD_ACCENT,
+            width=CARD_ACCENT_WIDTH,
+            cursor="hand2",
+            takefocus=0,
+        )
+        self._accent.pack(side="left", fill="y")
+        self._accent.pack_propagate(False)
+
+        content = tk.Frame(body, bg=CARD_BG, cursor="hand2", takefocus=0)
+        content.pack(side="left", fill="both", expand=True)
+
+        self._content = content
+        self._body = body
+
+        self._title_label = tk.Label(
+            content,
+            text=self._title,
+            bg=CARD_BG,
+            fg=CARD_TITLE_FG,
+            font=("Segoe UI", FONT_SIZE_MD, "bold"),
+            anchor="w",
+            justify="left",
+            wraplength=self._wraplength,
+            cursor="hand2",
+            takefocus=0,
+        )
+        self._title_label.pack(
+            fill="x",
+            padx=(CARD_PADX, CARD_PADX),
+            pady=(CARD_PADY, CARD_TITLE_GAP),
+        )
+
+        self._desc_label = tk.Label(
+            content,
+            text=self._description,
+            bg=CARD_BG,
+            fg=CARD_DESC_FG,
+            font=("Segoe UI", FONT_SIZE_SM),
+            anchor="nw",
+            justify="left",
+            wraplength=self._wraplength,
+            cursor="hand2",
+            takefocus=0,
+        )
+        self._desc_label.pack(
+            fill="both",
+            expand=True,
+            padx=(CARD_PADX, CARD_PADX),
+            pady=(0, CARD_PADY),
+        )
+
+        if card_width is not None:
+            self.configure(width=card_width)
+            self.pack_propagate(False)
+        # Sin width fijo: en macOS/Tk, configure() con -width y height=0
+        # colapsa reqheight a 1 en cada _apply_visual (temblor del grid).
+
+        self._surfaces = (
+            self,
+            body,
+            self._accent,
+            content,
+            self._title_label,
+            self._desc_label,
+        )
+        for widget in self._surfaces:
+            widget.bind("<Enter>", self._on_enter)
+            widget.bind("<Leave>", self._on_leave)
+            widget.bind("<ButtonPress-1>", self._on_press)
+            widget.bind("<ButtonRelease-1>", self._on_release)
+
+        self.bind("<FocusIn>", self._on_focus_in)
+        self.bind("<FocusOut>", self._on_focus_out)
+        self.bind("<Return>", self._on_activate_key)
+        self.bind("<space>", self._on_activate_key)
+        for widget in (self._title_label, self._desc_label, content, self._accent, body):
+            widget.bind("<ButtonPress-1>", self._focus_self, add="+")
+
+        if state != "normal":
+            self.configure(state=state)
+        else:
+            self._apply_visual()
+
+    def _focus_self(self, _event=None):
+        if self._state == "normal":
+            self.focus_set()
+
+    def _is_enabled(self) -> bool:
+        return self._state == "normal"
+
+    def _event_inside(self, event) -> bool:
+        """True si el puntero sigue dentro de esta tarjeta (o un descendiente)."""
+        if event is None:
+            return False
+        try:
+            x = event.x_root
+            y = event.y_root
+        except AttributeError:
+            return False
+
+        try:
+            widget = self.winfo_containing(x, y)
+        except tk.TclError:
+            widget = None
+        while widget is not None:
+            if widget == self:
+                return True
+            widget = getattr(widget, "master", None)
+
+        # Fallback geométrico (p. ej. tests con root withdraw o containing nulo).
+        try:
+            rx = self.winfo_rootx()
+            ry = self.winfo_rooty()
+            rw = max(self.winfo_width(), self.winfo_reqwidth())
+            rh = max(self.winfo_height(), self.winfo_reqheight())
+        except tk.TclError:
+            return False
+        return rx <= x < rx + rw and ry <= y < ry + rh
+
+    def _on_enter(self, _event=None):
+        if not self._is_enabled():
+            return
+        if self._hovered:
+            return
+        self._hovered = True
+        self._apply_visual()
+
+    def _on_leave(self, event=None):
+        # Leave de un hijo al pasar a otro hijo: el puntero sigue dentro.
+        if self._event_inside(event):
+            return
+        if not self._hovered and not self._pressed:
+            return
+        self._hovered = False
+        self._apply_visual()
+
+    def _on_press(self, event=None):
+        if not self._is_enabled():
+            return "break"
+        self._focus_self()
+        self._pressed = True
+        self._hovered = True
+        self._apply_visual()
+        return "break"
+
+    def _on_release(self, event=None):
+        if not self._pressed:
+            return "break"
+        self._pressed = False
+        inside = event is None or self._event_inside(event)
+        should_run = self._is_enabled() and inside
+        self._hovered = inside and self._is_enabled()
+        self._apply_visual()
+        if should_run:
+            self._invoke()
+        return "break"
+
+    def _on_focus_in(self, _event=None):
+        self._focused = True
+        self._apply_visual()
+
+    def _on_focus_out(self, _event=None):
+        self._focused = False
+        self._apply_visual()
+
+    def _on_activate_key(self, _event=None):
+        if not self._is_enabled():
+            return "break"
+        self._invoke()
+        return "break"
+
+    def _invoke(self):
+        if not self._is_enabled():
+            return
+        if callable(self._command):
+            self._command()
+
+    def _apply_visual(self):
+        # relief siempre flat: sunken/raised alteran la geometría exterior.
+        if not self._is_enabled():
+            bg = CARD_DISABLED_BG
+            title_fg = CARD_DISABLED_FG
+            desc_fg = CARD_DISABLED_FG
+            accent = CARD_DISABLED_FG
+            border = CARD_BORDER
+            cursor = "arrow"
+        elif self._pressed and self._hovered:
+            bg = CARD_HOVER_BG
+            title_fg = CARD_TITLE_FG
+            desc_fg = CARD_DESC_FG
+            accent = CARD_BORDER_PRESSED
+            border = CARD_BORDER_PRESSED
+            cursor = "hand2"
+        elif self._hovered:
+            bg = CARD_HOVER_BG
+            title_fg = CARD_TITLE_FG
+            desc_fg = CARD_DESC_FG
+            accent = CARD_ACCENT
+            border = CARD_BORDER_HOVER
+            cursor = "hand2"
+        else:
+            bg = CARD_BG
+            title_fg = CARD_TITLE_FG
+            desc_fg = CARD_DESC_FG
+            accent = CARD_ACCENT
+            border = CARD_BORDER
+            cursor = "hand2"
+
+        if self._focused and self._is_enabled():
+            border = CARD_BORDER_FOCUS
+
+        super().configure(
+            bg=bg,
+            cursor=cursor,
+            relief="flat",
+            highlightbackground=border,
+            highlightcolor=CARD_BORDER_FOCUS,
+        )
+        for widget in (self._body, self._content):
+            widget.configure(bg=bg, cursor=cursor)
+        self._accent.configure(bg=accent, cursor=cursor)
+        self._title_label.configure(bg=bg, fg=title_fg, cursor=cursor)
+        self._desc_label.configure(bg=bg, fg=desc_fg, cursor=cursor)
+
+    def configure(self, cnf=None, **kwargs):
+        if cnf is None:
+            cnf = {}
+        elif not isinstance(cnf, dict):
+            return self.cget(cnf)
+
+        options = dict(cnf, **kwargs)
+        if not options:
+            return super().configure()
+
+        handled = {}
+        if "state" in options:
+            state = options.pop("state")
+            if state not in ("normal", "disabled"):
+                raise tk.TclError(f'bad state "{state}": must be normal or disabled')
+            self._state = state
+            if state == "disabled":
+                self._pressed = False
+                self._hovered = False
+            handled["state"] = True
+
+        if "title" in options:
+            self._title = options.pop("title") or ""
+            self._title_label.configure(text=self._title)
+            handled["title"] = True
+
+        if "description" in options:
+            self._description = options.pop("description") or ""
+            self._desc_label.configure(text=self._description)
+            handled["description"] = True
+
+        if "text" in options:
+            # Alias de title para compatibilidad con APIs tipo botón.
+            self._title = options.pop("text") or ""
+            self._title_label.configure(text=self._title)
+            handled["title"] = True
+
+        if "command" in options:
+            self._command = options.pop("command")
+            handled["command"] = True
+
+        for key in (
+            "bg",
+            "fg",
+            "background",
+            "foreground",
+            "highlightbackground",
+            "cursor",
+            "relief",
+        ):
+            options.pop(key, None)
+
+        result = None
+        if options:
+            result = super().configure(**options)
+
+        if handled:
+            self._apply_visual()
+
+        return result
+
+    config = configure
+
+    def cget(self, key):
+        if key == "state":
+            return self._state
+        if key in ("title", "text"):
+            return self._title
+        if key == "description":
+            return self._description
+        if key == "command":
+            return self._command
+        if key in ("bg", "background"):
+            return self._content.cget("bg")
+        if key == "cursor":
+            return self.tk.call(self._w, "cget", "-cursor")
+        if key == "relief":
+            return self.tk.call(self._w, "cget", "-relief")
+        if key == "takefocus":
+            return self.tk.call(self._w, "cget", "-takefocus")
+        if key == "highlightbackground":
+            return self.tk.call(self._w, "cget", "-highlightbackground")
+        return super().cget(key)
+
+    def __getitem__(self, key):
+        return self.cget(key)
+
+    def __setitem__(self, key, value):
+        self.configure({key: value})
+
+    def invoke(self):
+        """Ejecuta el comando si la tarjeta está habilitada."""
+        self._invoke()
+
+
+def create_tool_card(
+    parent,
+    title,
+    description,
+    command,
+    state="normal",
+    width=None,
+    pack=False,
+):
+    card = ToolCard(
+        parent,
+        title=title,
+        description=description,
+        command=command,
+        state=state,
+        width=width,
+    )
+    if pack:
+        card.pack(fill="both", expand=True, padx=CARD_GAP, pady=CARD_GAP)
+    return card

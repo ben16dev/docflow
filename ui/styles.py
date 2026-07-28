@@ -107,6 +107,29 @@ TAB_PADDING_X = 14
 TAB_PADDING_Y = 8
 
 # =============================================================================
+# TARJETAS DE HERRAMIENTA (ToolCard)
+# =============================================================================
+
+CARD_BG = BACKGROUND_PANEL
+CARD_HOVER_BG = BACKGROUND_MUTED
+CARD_DISABLED_BG = BACKGROUND_MUTED
+CARD_BORDER = BORDER_DEFAULT
+CARD_BORDER_HOVER = PRIMARY_INDIGO_HOVER
+CARD_BORDER_FOCUS = ACCENT_TEAL
+CARD_BORDER_PRESSED = PRIMARY_INDIGO
+CARD_ACCENT = ACCENT_TEAL
+CARD_TITLE_FG = TEXT_PRIMARY
+CARD_DESC_FG = TEXT_SECONDARY
+CARD_DISABLED_FG = TEXT_DISABLED
+CARD_PADX = SPACE_MD
+CARD_PADY = SPACE_MD
+CARD_TITLE_GAP = SPACE_XS
+CARD_GAP = SPACE_SM
+CARD_ACCENT_WIDTH = 4
+CARD_MIN_WIDTH = 240
+CARD_WRAPLENGTH = 220
+
+# =============================================================================
 # ALIASES LEGACY — botones de ejecución (CorporateButton y consumidores actuales)
 # Conservar valores originales hasta migrar variantes en una fase posterior.
 # =============================================================================

@@ -486,6 +486,7 @@ class App(tk.Tk):
 
             self._call_ui(self.status_bar.set_status, mensaje)
             self._call_ui(self.status_bar.set_state, "success")
+            self._call_ui(self.status_bar.complete_progress)
 
             if carpeta:
                 self._call_ui(self.status_bar.enable_open_button, carpeta)
@@ -519,6 +520,7 @@ class App(tk.Tk):
                 status = status[:77] + "..."
             self._call_ui(self.status_bar.set_status, f"Error: {status}")
             self._call_ui(self.status_bar.set_state, "error")
+            self._call_ui(self.status_bar.reset_progress)
 
         def on_cancelled(resultado=None):
             self.last_result = {
@@ -530,10 +532,10 @@ class App(tk.Tk):
 
             self._call_ui(self.status_bar.set_status, "Cancelado")
             self._call_ui(self.status_bar.set_state, "cancelado")
+            self._call_ui(self.status_bar.reset_progress)
 
         def on_finally():
             self._call_ui(self.config, cursor="")
-            self._call_ui(self.status_bar.reset_progress)
             self._call_ui(self.status_bar.reset_timer)
             self._call_ui(self.status_bar.disable_cancel_button)
             self._call_ui(self._bloquear_tabs, False)
@@ -606,6 +608,7 @@ class App(tk.Tk):
 
             self._call_ui(self.status_bar.set_status, mensaje)
             self._call_ui(self.status_bar.set_state, "success")
+            self._call_ui(self.status_bar.complete_progress)
 
             if carpeta:
                 self._call_ui(self.status_bar.enable_open_button, carpeta)
@@ -639,6 +642,7 @@ class App(tk.Tk):
                 status = status[:77] + "..."
             self._call_ui(self.status_bar.set_status, f"Error: {status}")
             self._call_ui(self.status_bar.set_state, "error")
+            self._call_ui(self.status_bar.reset_progress)
 
         def on_cancelled(resultado=None):
             self.last_result = {
@@ -650,10 +654,10 @@ class App(tk.Tk):
 
             self._call_ui(self.status_bar.set_status, "Cancelado")
             self._call_ui(self.status_bar.set_state, "cancelado")
+            self._call_ui(self.status_bar.reset_progress)
 
         def on_finally():
             self._call_ui(self.config, cursor="")
-            self._call_ui(self.status_bar.reset_progress)
             self._call_ui(self.status_bar.reset_timer)
             self._call_ui(self.status_bar.disable_cancel_button)
             self._call_ui(self._bloquear_tabs, False)
