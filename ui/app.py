@@ -28,7 +28,13 @@ from ui.status_bar import StatusBar
 from config import set_ruta, get_ruta
 from ui.window_icon import set_window_icon
 from utils.resources import resource_path
-from ui.styles import TOP_BG
+from ui.styles import (
+    BACKGROUND_APP,
+    BACKGROUND_MUTED,
+    BORDER_DEFAULT,
+    PRIMARY_INDIGO,
+    TOP_BG,
+)
 
 
 RUTA_PLACEHOLDER = "Selecciona la carpeta de trabajo aquí"
@@ -62,7 +68,8 @@ class App(tk.Tk):
 
         self._crear_estilos()
 
-        self.main_container = tk.Frame(self)
+        self.configure(bg=BACKGROUND_APP)
+        self.main_container = tk.Frame(self, bg=BACKGROUND_APP)
         self.main_container.pack(fill="both", expand=True)
 
         self._crear_cabecera()
@@ -143,16 +150,18 @@ class App(tk.Tk):
         except Exception as exc:
             logger.warning(f"No se pudo cargar assets/logo.png: {exc}")
 
-        tk.Frame(self.main_container, height=1, bg="#c8ddf0").pack(fill="x", side="top")
+        tk.Frame(self.main_container, height=1, bg=BORDER_DEFAULT).pack(
+            fill="x", side="top"
+        )
 
     def _crear_estilos(self):
         style = ttk.Style(self)
         style.theme_use("default")
         style.configure(
             "DocFlow.Horizontal.TProgressbar",
-            troughcolor="#eaf4ff",
-            background="#6de800",
-            thickness=16
+            troughcolor=BACKGROUND_MUTED,
+            background=PRIMARY_INDIGO,
+            thickness=16,
         )
 
     def _crear_tabs(self):
