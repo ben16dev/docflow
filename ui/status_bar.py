@@ -230,7 +230,14 @@ class StatusBar(tk.Frame):
         else:
             self.progress["value"] = 0
 
+    def complete_progress(self):
+        """Deja la barra visualmente al 100 % (éxito)."""
+        self.progress["mode"] = "determinate"
+        self.progress["value"] = 100
+
     def reset_progress(self):
+        self.progress.stop()
+        self.progress["mode"] = "determinate"
         self.progress["value"] = 0
 
     # ==================================================
