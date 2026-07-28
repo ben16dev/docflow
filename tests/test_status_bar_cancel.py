@@ -125,3 +125,11 @@ def test_set_state_cancelado_uses_distinct_color(root):
     assert cancelled_fg != status_bar.COLORS["success"]
     assert cancelled_fg != status_bar.COLORS["error"]
     assert cancelled_fg != status_bar.COLORS["running"]
+
+
+def test_status_bar_has_no_progressbar(root):
+    status_bar = _make_status_bar(root)
+    assert not hasattr(status_bar, "progress")
+    from ui.styles import STATUS_BAR_HEIGHT
+
+    assert int(status_bar.cget("height")) == STATUS_BAR_HEIGHT

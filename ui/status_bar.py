@@ -1,5 +1,4 @@
 import tkinter as tk
-from tkinter import ttk
 from pathlib import Path
 import time
 import platform
@@ -14,6 +13,7 @@ from ui.styles import (
     STATE_IDLE,
     STATE_RUNNING,
     STATE_SUCCESS,
+    STATUS_BAR_HEIGHT,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
 )
@@ -37,11 +37,6 @@ class StatusBar(tk.Frame):
         self.app_version = app_version
         self.app_author = app_author
 
-        # Siempre visible
-        self.pack(side="bottom", fill="x")
-        self.configure(height=70)
-        self.pack_propagate(False)
-
         self.cancel_callback = cancel_callback
         self._output_dir = None
 
@@ -53,13 +48,14 @@ class StatusBar(tk.Frame):
         self._after_id = None
 
         # ==========================
-        # GRID LAYOUT
+        # GRID LAYOUT (fila única)
         # ==========================
+        self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=0)
 
         top_row = tk.Frame(self, bg=BACKGROUND_MUTED)
-        top_row.grid(row=0, column=0, columnspan=2, sticky="ew")
+        top_row.grid(row=0, column=0, columnspan=2, sticky="nsew")
         top_row.grid_columnconfigure(0, weight=1)
 
         left = tk.Frame(top_row, bg=BACKGROUND_MUTED)
@@ -80,7 +76,7 @@ class StatusBar(tk.Frame):
             font=("Segoe UI", 9),
             anchor="w"
         )
-        self.lbl_status.grid(row=0, column=0, sticky="ew", padx=(10, 10), pady=(6, 2))
+        self.lbl_status.grid(row=0, column=0, sticky="ew", padx=(10, 10), pady=(4, 4))
 
         # INFO
         self.lbl_info = tk.Label(
@@ -90,7 +86,7 @@ class StatusBar(tk.Frame):
             fg=TEXT_SECONDARY,
             font=("Segoe UI", 8)
         )
-        self.lbl_info.pack(side="right", padx=(10, 15), pady=(6, 2))
+        self.lbl_info.pack(side="right", padx=(10, 15), pady=(4, 4))
 
         # TIMER LABEL
         self.lbl_timer = tk.Label(
@@ -100,10 +96,10 @@ class StatusBar(tk.Frame):
             fg=self.COLORS["idle"],
             font=("Segoe UI", 9, "bold")
         )
-        self.lbl_timer.pack(side="right", padx=(10, 10), pady=(6, 2))
+        self.lbl_timer.pack(side="right", padx=(10, 10), pady=(4, 4))
 
-        # Dimensiones compactas para caber en height=70 sin alterar la geometría.
-        _btn_kwargs = {"width": None, "padx": 10, "pady": 4}
+        # Compacto para caber en STATUS_BAR_HEIGHT sin progressbar.
+        _btn_kwargs = {"width": None, "padx": 10, "pady": 3}
 
         # ==========================
         # BOTÓN DIAGNÓSTICO
@@ -115,7 +111,7 @@ class StatusBar(tk.Frame):
             variant="diagnostic",
             **_btn_kwargs,
         )
-        self.btn_diag.pack(side="right", padx=(10, 0), pady=(4, 4))
+        self.btn_diag.pack(side="right", padx=(10, 0), pady=(2, 2))
 
         # ==========================
         # BOTÓN ABRIR
@@ -128,7 +124,7 @@ class StatusBar(tk.Frame):
             **_btn_kwargs,
         )
         self.btn_open.configure(state="disabled")
-        self.btn_open.pack(side="right", padx=(10, 0), pady=(4, 4))
+        self.btn_open.pack(side="right", padx=(10, 0), pady=(2, 2))
 
         # ==========================
         # BOTÓN CANCELAR
@@ -141,18 +137,15 @@ class StatusBar(tk.Frame):
             **_btn_kwargs,
         )
         self.btn_cancel.configure(state="disabled")
-        self.btn_cancel.pack(side="right", padx=(10, 0), pady=(4, 4))
+        self.btn_cancel.pack(side="right", padx=(10, 0), pady=(2, 2))
 
-        # ==========================
-        # PROGRESS BAR
-        # ==========================
-        self.progress = ttk.Progressbar(
-            self,
-            orient="horizontal",
-            mode="determinate",
-            style="DocFlow.Horizontal.TProgressbar"
-        )
-        self.progress.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 8))
+        # Altura fija tras construir hijos; pack al final para reservar espacio
+        # antes del contenedor expandible de App.
+        # grid_propagate: los hijos usan grid; pack_propagate solo no basta.
+        self.configure(height=STATUS_BAR_HEIGHT)
+        self.pack_propagate(False)
+        self.grid_propagate(False)
+        self.pack(side="bottom", fill="x")
 
     # ==================================================
     # DIAGNÓSTICO AVANZADO
@@ -219,26 +212,6 @@ class StatusBar(tk.Frame):
 
     def set_status(self, text):
         self.lbl_status.config(text=text or "")
-
-    # ==================================================
-    # PROGRESS
-    # ==================================================
-
-    def set_progress(self, current, total):
-        if total and total > 0:
-            self.progress["value"] = (current / total) * 100
-        else:
-            self.progress["value"] = 0
-
-    def complete_progress(self):
-        """Deja la barra visualmente al 100 % (éxito)."""
-        self.progress["mode"] = "determinate"
-        self.progress["value"] = 100
-
-    def reset_progress(self):
-        self.progress.stop()
-        self.progress["mode"] = "determinate"
-        self.progress["value"] = 0
 
     # ==================================================
     # OPEN FOLDER

@@ -24,6 +24,7 @@ from ui.tabs.tab_archivos import build_tab as build_tab_archivos
 from ui.tabs.tab_conversion import build_tab as build_tab_conversion
 
 from ui.dialog_error import show_error_dialog
+from ui.progress_panel import ProgressPanel
 from ui.status_bar import StatusBar
 from config import set_ruta, get_ruta
 from ui.window_icon import set_window_icon
@@ -85,11 +86,14 @@ class App(tk.Tk):
 
         self.configure(bg=BACKGROUND_APP)
         self.main_container = tk.Frame(self, bg=BACKGROUND_APP)
-        self.main_container.pack(fill="both", expand=True)
+        # Empaquetar main_container DESPUÉS de StatusBar/ProgressPanel
+        # (side=bottom) para reservar su altura y evitar recorte.
 
         self._crear_cabecera()
         self._crear_tabs()
 
+        # StatusBar primero (side=bottom): queda en el borde inferior.
+        # ProgressPanel después (side=bottom): se sitúa inmediatamente encima.
         self.status_bar = StatusBar(
             parent=self,
             app_name=APP_NAME,
@@ -97,6 +101,9 @@ class App(tk.Tk):
             app_author=APP_AUTHOR,
             cancel_callback=self._cancelar
         )
+        self.progress_panel = ProgressPanel(self)
+
+        self.main_container.pack(fill="both", expand=True)
 
         try:
             self.status_bar.btn_diag.config(command=self._mostrar_ultimo_proceso)
@@ -105,6 +112,7 @@ class App(tk.Tk):
 
         self.status_bar.set_state("idle")
         self.status_bar.set_status("Listo")
+        self.progress_panel.set_idle()
 
     def _call_ui(self, func, *args, **kwargs):
         self.after(0, lambda: func(*args, **kwargs))
@@ -453,7 +461,7 @@ class App(tk.Tk):
         self._cancelado = False
 
         self.config(cursor="watch")
-        self.status_bar.reset_progress()
+        self.progress_panel.reset_progress()
         self.status_bar.reset_timer()
         self.status_bar.disable_open_button()
         self.status_bar.set_status(f"Ejecutando: {nombre_script}")
@@ -462,7 +470,7 @@ class App(tk.Tk):
         self._bloquear_tabs(True)
 
         def progreso(actual, total):
-            self._call_ui(self.status_bar.set_progress, actual, total)
+            self._call_ui(self.progress_panel.set_progress, actual, total)
 
         def cancelado():
             return self._cancelado
@@ -486,7 +494,7 @@ class App(tk.Tk):
 
             self._call_ui(self.status_bar.set_status, mensaje)
             self._call_ui(self.status_bar.set_state, "success")
-            self._call_ui(self.status_bar.complete_progress)
+            self._call_ui(self.progress_panel.complete_progress)
 
             if carpeta:
                 self._call_ui(self.status_bar.enable_open_button, carpeta)
@@ -520,7 +528,7 @@ class App(tk.Tk):
                 status = status[:77] + "..."
             self._call_ui(self.status_bar.set_status, f"Error: {status}")
             self._call_ui(self.status_bar.set_state, "error")
-            self._call_ui(self.status_bar.reset_progress)
+            self._call_ui(self.progress_panel.reset_progress)
 
         def on_cancelled(resultado=None):
             self.last_result = {
@@ -532,7 +540,7 @@ class App(tk.Tk):
 
             self._call_ui(self.status_bar.set_status, "Cancelado")
             self._call_ui(self.status_bar.set_state, "cancelado")
-            self._call_ui(self.status_bar.reset_progress)
+            self._call_ui(self.progress_panel.reset_progress)
 
         def on_finally():
             self._call_ui(self.config, cursor="")
@@ -575,7 +583,7 @@ class App(tk.Tk):
         self._cancelado = False
 
         self.config(cursor="watch")
-        self.status_bar.reset_progress()
+        self.progress_panel.reset_progress()
         self.status_bar.reset_timer()
         self.status_bar.disable_open_button()
         self.status_bar.set_status(f"Ejecutando: {nombre_script}")
@@ -584,7 +592,7 @@ class App(tk.Tk):
         self._bloquear_tabs(True)
 
         def progreso(actual, total):
-            self._call_ui(self.status_bar.set_progress, actual, total)
+            self._call_ui(self.progress_panel.set_progress, actual, total)
 
         def cancelado():
             return self._cancelado
@@ -608,7 +616,7 @@ class App(tk.Tk):
 
             self._call_ui(self.status_bar.set_status, mensaje)
             self._call_ui(self.status_bar.set_state, "success")
-            self._call_ui(self.status_bar.complete_progress)
+            self._call_ui(self.progress_panel.complete_progress)
 
             if carpeta:
                 self._call_ui(self.status_bar.enable_open_button, carpeta)
@@ -642,7 +650,7 @@ class App(tk.Tk):
                 status = status[:77] + "..."
             self._call_ui(self.status_bar.set_status, f"Error: {status}")
             self._call_ui(self.status_bar.set_state, "error")
-            self._call_ui(self.status_bar.reset_progress)
+            self._call_ui(self.progress_panel.reset_progress)
 
         def on_cancelled(resultado=None):
             self.last_result = {
@@ -654,7 +662,7 @@ class App(tk.Tk):
 
             self._call_ui(self.status_bar.set_status, "Cancelado")
             self._call_ui(self.status_bar.set_state, "cancelado")
-            self._call_ui(self.status_bar.reset_progress)
+            self._call_ui(self.progress_panel.reset_progress)
 
         def on_finally():
             self._call_ui(self.config, cursor="")

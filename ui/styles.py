@@ -127,6 +127,17 @@ TAB_PADDING_X = 14
 TAB_PADDING_Y = 8
 
 # =============================================================================
+# PROGRESS PANEL Y STATUS BAR (franja inferior)
+# =============================================================================
+
+PROGRESS_PANEL_BG = BACKGROUND_MUTED
+PROGRESS_PANEL_BORDER = BORDER_DEFAULT
+PROGRESS_PANEL_HEIGHT = 50
+PROGRESS_PERCENT_FG = TEXT_SECONDARY
+
+STATUS_BAR_HEIGHT = 46
+
+# =============================================================================
 # TARJETAS DE HERRAMIENTA (ToolCard)
 # =============================================================================
 
