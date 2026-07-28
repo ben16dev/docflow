@@ -1,14 +1,7 @@
 import tkinter as tk
 
-from ui.styles import (
-    BTN_BG,
-    BTN_BG_DISABLED,
-    BTN_BG_HOVER,
-    BTN_BG_PRESSED,
-    BTN_FG,
-    BTN_FG_DISABLED_SURFACE,
-    BTN_FOCUS_COLOR,
-)
+from ui.styles import BUTTON_VARIANTS
+
 
 
 # =========================
@@ -22,19 +15,62 @@ class CorporateButton(tk.Frame):
     Usa Frame + Label para evitar el pintado inconsistente de tk.Button en Aqua.
     Compatibilidad parcial con tk.Button: grid/pack, config/configure/cget
     para state, text y command.
+
+    Variantes semánticas (colores solo desde ui.styles.BUTTON_VARIANTS):
+    primary, secondary, cancel, success, diagnostic.
     """
 
-    def __init__(self, parent, text="", command=None, **kwargs):
+    VALID_VARIANTS = frozenset(BUTTON_VARIANTS)
+
+    def __init__(
+        self,
+        parent,
+        text="",
+        command=None,
+        variant="primary",
+        width=40,
+        padx=8,
+        pady=12,
+        **kwargs,
+    ):
+        if variant not in self.VALID_VARIANTS:
+            raise ValueError(
+                f'variante inválida "{variant}": '
+                f'debe ser una de {sorted(self.VALID_VARIANTS)}'
+            )
+
+        # kwargs residuales de tk.Button se ignoran de forma segura más abajo.
+        for key in (
+            "bg",
+            "fg",
+            "background",
+            "foreground",
+            "activebackground",
+            "activeforeground",
+            "disabledforeground",
+            "highlightbackground",
+            "cursor",
+            "relief",
+            "state",
+        ):
+            kwargs.pop(key, None)
+
+        self._variant = variant
+        self._palette = BUTTON_VARIANTS[variant]
+        initial_bg = self._palette["bg"]
+        focus_color = self._palette["focus"]
+
         super().__init__(
             parent,
-            bg=BTN_BG,
+            bg=initial_bg,
             highlightthickness=2,
-            highlightbackground=BTN_BG,
-            highlightcolor=BTN_FOCUS_COLOR,
+            highlightbackground=initial_bg,
+            highlightcolor=focus_color,
             bd=1,
             relief="raised",
             cursor="hand2",
             takefocus=1,
+            **kwargs,
         )
 
         self._command = command
@@ -43,18 +79,20 @@ class CorporateButton(tk.Frame):
         self._pressed = False
         self._focused = False
 
-        self._label = tk.Label(
-            self,
-            text=text,
-            bg=BTN_BG,
-            fg=BTN_FG,
-            font=("Segoe UI", 10),
-            width=40,
-            padx=8,
-            pady=12,
-            cursor="hand2",
-            takefocus=0,
-        )
+        label_opts = {
+            "text": text,
+            "bg": initial_bg,
+            "fg": self._palette["fg"],
+            "font": ("Segoe UI", 10),
+            "padx": padx,
+            "pady": pady,
+            "cursor": "hand2",
+            "takefocus": 0,
+        }
+        if width is not None:
+            label_opts["width"] = width
+
+        self._label = tk.Label(self, **label_opts)
         self._label.pack(fill="both", expand=True)
 
         self._bind_surface("<Enter>", self._on_enter)
@@ -147,24 +185,27 @@ class CorporateButton(tk.Frame):
             self._command()
 
     def _apply_visual(self):
+        palette = self._palette
+        focus_color = palette["focus"]
+
         if not self._is_enabled():
-            bg, fg = BTN_BG_DISABLED, BTN_FG_DISABLED_SURFACE
+            bg, fg = palette["disabled_bg"], palette["disabled_fg"]
             relief = "raised"
             cursor = "arrow"
         elif self._pressed and self._hovered:
-            bg, fg = BTN_BG_PRESSED, BTN_FG
+            bg, fg = palette["pressed"], palette["fg"]
             relief = "sunken"
             cursor = "hand2"
         elif self._hovered:
-            bg, fg = BTN_BG_HOVER, BTN_FG
+            bg, fg = palette["hover"], palette["fg"]
             relief = "raised"
             cursor = "hand2"
         else:
-            bg, fg = BTN_BG, BTN_FG
+            bg, fg = palette["bg"], palette["fg"]
             relief = "raised"
             cursor = "hand2"
 
-        highlight_bg = BTN_FOCUS_COLOR if self._focused else bg
+        highlight_bg = focus_color if self._focused else bg
 
         # Usar super().configure para no reentrar en la API de compatibilidad.
         super().configure(
@@ -172,7 +213,7 @@ class CorporateButton(tk.Frame):
             relief=relief,
             cursor=cursor,
             highlightbackground=highlight_bg,
-            highlightcolor=BTN_FOCUS_COLOR,
+            highlightcolor=focus_color,
         )
         self._label.configure(
             bg=bg,
@@ -210,6 +251,17 @@ class CorporateButton(tk.Frame):
             self._command = options.pop("command")
             handled["command"] = True
 
+        if "variant" in options:
+            variant = options.pop("variant")
+            if variant not in self.VALID_VARIANTS:
+                raise ValueError(
+                    f'variante inválida "{variant}": '
+                    f'debe ser una de {sorted(self.VALID_VARIANTS)}'
+                )
+            self._variant = variant
+            self._palette = BUTTON_VARIANTS[variant]
+            handled["variant"] = True
+
         # Campos visuales propios de tk.Button: se ignoran de forma segura
         # para no romper llamadas residuales; la apariencia la controla _apply_visual.
         for key in (
@@ -244,16 +296,18 @@ class CorporateButton(tk.Frame):
             return self._label.cget("text")
         if key == "command":
             return self._command
+        if key == "variant":
+            return self._variant
         if key in ("bg", "background"):
             return self._label.cget("bg")
         if key in ("fg", "foreground"):
             return self._label.cget("fg")
         if key == "activebackground":
-            return BTN_BG_HOVER
+            return self._palette["hover"]
         if key == "activeforeground":
-            return BTN_FG
+            return self._palette["fg"]
         if key == "disabledforeground":
-            return BTN_FG_DISABLED_SURFACE
+            return self._palette["disabled_fg"]
         if key == "highlightbackground":
             return self.tk.call(self._w, "cget", "-highlightbackground")
         if key == "highlightcolor":
@@ -277,8 +331,26 @@ class CorporateButton(tk.Frame):
         self._invoke()
 
 
-def create_corporate_button(parent, app, text, command, pack=True):
-    btn = CorporateButton(parent, text=text, command=command)
+def create_corporate_button(
+    parent,
+    app,
+    text,
+    command,
+    pack=True,
+    variant="primary",
+    width=40,
+    padx=8,
+    pady=12,
+):
+    btn = CorporateButton(
+        parent,
+        text=text,
+        command=command,
+        variant=variant,
+        width=width,
+        padx=padx,
+        pady=pady,
+    )
 
     if pack:
         btn.pack(pady=6, anchor="w")

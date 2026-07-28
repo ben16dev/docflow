@@ -19,9 +19,13 @@ ACCENT_TEAL_DARK = "#0F766E"
 
 ACTION_CANCEL = "#C2410C"
 ACTION_CANCEL_HOVER = "#9A3412"
+ACTION_CANCEL_PRESSED = "#7C2D12"
 
 ACTION_SUCCESS = "#047857"
 ACTION_SUCCESS_HOVER = "#065F46"
+ACTION_SUCCESS_PRESSED = "#064E3B"
+
+PRIMARY_INDIGO_PRESSED = "#172554"
 
 # =============================================================================
 # SUPERFICIES
@@ -54,7 +58,8 @@ STATE_IDLE = TEXT_SECONDARY
 STATE_RUNNING = PRIMARY_INDIGO_HOVER
 STATE_SUCCESS = ACTION_SUCCESS
 STATE_ERROR = ACTION_CANCEL
-STATE_CANCELLED = TEXT_DISABLED
+# Ámbar oscuro: distinto de idle, error (coral), success y running.
+STATE_CANCELLED = "#B45309"
 
 # =============================================================================
 # TIPOGRAFÍA (tamaños; la familia se resuelve por plataforma en fases posteriores)
@@ -100,6 +105,71 @@ BTN_FOCUS_COLOR = "#7ec8e8"
 
 CANCEL_BG = "#ED8F7B"
 CANCEL_HOVER = "#E5735C"
+
+# =============================================================================
+# VARIANTES DE BOTÓN (CorporateButton) — solo colores centralizados
+# =============================================================================
+
+BTN_SECONDARY_BG = BACKGROUND_PANEL
+BTN_SECONDARY_HOVER = BACKGROUND_MUTED
+BTN_SECONDARY_PRESSED = BORDER_DEFAULT
+BTN_SECONDARY_FG = TEXT_PRIMARY
+BTN_SECONDARY_DISABLED_BG = BACKGROUND_MUTED
+BTN_SECONDARY_DISABLED_FG = TEXT_DISABLED
+
+# Superficie disabled compartida para variantes semánticas oscuras.
+BTN_VARIANT_DISABLED_BG = "#64748B"
+BTN_VARIANT_DISABLED_FG = "#E2E8F0"
+BTN_VARIANT_FOCUS = "#93C5FD"
+
+BUTTON_VARIANTS = {
+    # primary: apariencia legacy de herramientas (evita regresiones en pestañas).
+    "primary": {
+        "bg": BTN_BG,
+        "hover": BTN_BG_HOVER,
+        "pressed": BTN_BG_PRESSED,
+        "fg": BTN_FG,
+        "disabled_bg": BTN_BG_DISABLED,
+        "disabled_fg": BTN_FG_DISABLED_SURFACE,
+        "focus": BTN_FOCUS_COLOR,
+    },
+    "secondary": {
+        "bg": BTN_SECONDARY_BG,
+        "hover": BTN_SECONDARY_HOVER,
+        "pressed": BTN_SECONDARY_PRESSED,
+        "fg": BTN_SECONDARY_FG,
+        "disabled_bg": BTN_SECONDARY_DISABLED_BG,
+        "disabled_fg": BTN_SECONDARY_DISABLED_FG,
+        "focus": BTN_VARIANT_FOCUS,
+    },
+    "cancel": {
+        "bg": ACTION_CANCEL,
+        "hover": ACTION_CANCEL_HOVER,
+        "pressed": ACTION_CANCEL_PRESSED,
+        "fg": TEXT_ON_PRIMARY,
+        "disabled_bg": BTN_VARIANT_DISABLED_BG,
+        "disabled_fg": BTN_VARIANT_DISABLED_FG,
+        "focus": BTN_VARIANT_FOCUS,
+    },
+    "success": {
+        "bg": ACTION_SUCCESS,
+        "hover": ACTION_SUCCESS_HOVER,
+        "pressed": ACTION_SUCCESS_PRESSED,
+        "fg": TEXT_ON_PRIMARY,
+        "disabled_bg": BTN_VARIANT_DISABLED_BG,
+        "disabled_fg": BTN_VARIANT_DISABLED_FG,
+        "focus": BTN_VARIANT_FOCUS,
+    },
+    "diagnostic": {
+        "bg": PRIMARY_INDIGO,
+        "hover": PRIMARY_INDIGO_HOVER,
+        "pressed": PRIMARY_INDIGO_PRESSED,
+        "fg": TEXT_ON_PRIMARY,
+        "disabled_bg": BTN_VARIANT_DISABLED_BG,
+        "disabled_fg": BTN_VARIANT_DISABLED_FG,
+        "focus": BTN_VARIANT_FOCUS,
+    },
+}
 
 # =============================================================================
 # ALIASES LEGACY — superficies y títulos (redirigen al Light Indigo DS)

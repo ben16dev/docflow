@@ -6,20 +6,32 @@ import platform
 import sys
 
 from scripts.registry import get_scripts
+from ui.common import CorporateButton
+from ui.styles import (
+    BACKGROUND_MUTED,
+    STATE_CANCELLED,
+    STATE_ERROR,
+    STATE_IDLE,
+    STATE_RUNNING,
+    STATE_SUCCESS,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+)
 from utils.platform_open import open_path
 
 
 class StatusBar(tk.Frame):
 
     COLORS = {
-        "idle": "#4f6d8a",
-        "running": "#ffc31a",
-        "success": "#6de800",
-        "error": "#fc5217",
+        "idle": STATE_IDLE,
+        "running": STATE_RUNNING,
+        "success": STATE_SUCCESS,
+        "error": STATE_ERROR,
+        "cancelado": STATE_CANCELLED,
     }
 
     def __init__(self, parent, app_name, app_version, app_author, cancel_callback):
-        super().__init__(parent, bd=1, relief="sunken", bg="#f7fbff")
+        super().__init__(parent, bd=1, relief="sunken", bg=BACKGROUND_MUTED)
 
         self.app_name = app_name
         self.app_version = app_version
@@ -46,15 +58,15 @@ class StatusBar(tk.Frame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=0)
 
-        top_row = tk.Frame(self, bg="#f7fbff")
+        top_row = tk.Frame(self, bg=BACKGROUND_MUTED)
         top_row.grid(row=0, column=0, columnspan=2, sticky="ew")
         top_row.grid_columnconfigure(0, weight=1)
 
-        left = tk.Frame(top_row, bg="#f7fbff")
+        left = tk.Frame(top_row, bg=BACKGROUND_MUTED)
         left.grid(row=0, column=0, sticky="ew")
         left.grid_columnconfigure(0, weight=1)
 
-        right = tk.Frame(top_row, bg="#f7fbff")
+        right = tk.Frame(top_row, bg=BACKGROUND_MUTED)
         right.grid(row=0, column=1, sticky="e")
 
         # ==========================
@@ -63,8 +75,8 @@ class StatusBar(tk.Frame):
         self.lbl_status = tk.Label(
             left,
             text="Listo",
-            bg="#f7fbff",
-            fg="#1f4e79",
+            bg=BACKGROUND_MUTED,
+            fg=TEXT_PRIMARY,
             font=("Segoe UI", 9),
             anchor="w"
         )
@@ -74,8 +86,8 @@ class StatusBar(tk.Frame):
         self.lbl_info = tk.Label(
             right,
             text=f"{app_name} {app_version} — {app_author}",
-            bg="#f7fbff",
-            fg="#4f6d8a",
+            bg=BACKGROUND_MUTED,
+            fg=TEXT_SECONDARY,
             font=("Segoe UI", 8)
         )
         self.lbl_info.pack(side="right", padx=(10, 15), pady=(6, 2))
@@ -84,58 +96,51 @@ class StatusBar(tk.Frame):
         self.lbl_timer = tk.Label(
             right,
             text="00:00.000",
-            bg="#f7fbff",
+            bg=BACKGROUND_MUTED,
             fg=self.COLORS["idle"],
             font=("Segoe UI", 9, "bold")
         )
         self.lbl_timer.pack(side="right", padx=(10, 10), pady=(6, 2))
 
+        # Dimensiones compactas para caber en height=70 sin alterar la geometría.
+        _btn_kwargs = {"width": None, "padx": 10, "pady": 4}
+
         # ==========================
         # BOTÓN DIAGNÓSTICO
         # ==========================
-        self.btn_diag = tk.Button(
+        self.btn_diag = CorporateButton(
             right,
             text="Diagnóstico",
-            height=2,
-            bg="#298cff",
-            fg="#ffffff",
-            relief="raised",
-            command=self._show_diagnostics
+            command=self._show_diagnostics,
+            variant="diagnostic",
+            **_btn_kwargs,
         )
         self.btn_diag.pack(side="right", padx=(10, 0), pady=(4, 4))
 
         # ==========================
         # BOTÓN ABRIR
         # ==========================
-        self.btn_open = tk.Button(
+        self.btn_open = CorporateButton(
             right,
             text="Abrir carpeta destino",
-            height=2,
-            bg="#fff273",
-            fg="#1f4e79",
-            activebackground="#fff273",
-            activeforeground="#1f4e79",
-            relief="raised",
-            state="disabled",
-            command=self._abrir_carpeta
+            command=self._abrir_carpeta,
+            variant="success",
+            **_btn_kwargs,
         )
+        self.btn_open.configure(state="disabled")
         self.btn_open.pack(side="right", padx=(10, 0), pady=(4, 4))
 
         # ==========================
         # BOTÓN CANCELAR
         # ==========================
-        self.btn_cancel = tk.Button(
+        self.btn_cancel = CorporateButton(
             right,
             text="Cancelar",
-            height=2,
-            bg="#fc5217",
-            fg="white",
-            activebackground="#d63f10",
-            activeforeground="white",
-            relief="raised",
-            state="disabled",
-            command=self._cancelar
+            command=self._cancelar,
+            variant="cancel",
+            **_btn_kwargs,
         )
+        self.btn_cancel.configure(state="disabled")
         self.btn_cancel.pack(side="right", padx=(10, 0), pady=(4, 4))
 
         # ==========================
@@ -324,7 +329,3 @@ class StatusBar(tk.Frame):
 
     def update_history(self, items):
         return
-
-
-
-
