@@ -6,6 +6,24 @@ Está desarrollada en **Python 3.13** con **Tkinter y ttk** y está orientada a 
 
 Todos los documentos se procesan **localmente en el equipo del usuario**. DocFlow no envía archivos ni contenido documental a servidores externos.
 
+## Capturas de pantalla
+
+### Conversión de documentos
+
+![Módulo de conversión de DocFlow](screenshots/modulo-convert.png)
+
+### Herramientas PDF
+
+![Módulo de herramientas PDF de DocFlow](screenshots/modulo-pdf.png)
+
+### Renombrado de archivos
+
+![Módulo de renombrado de archivos de DocFlow](screenshots/modulo-rename.png)
+
+### Numeración de PDF
+
+![Herramienta de numeración de documentos PDF](screenshots/numeracion-pdf.png)
+
 ## Funcionalidades principales
 
 ### PDF
