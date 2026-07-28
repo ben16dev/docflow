@@ -85,6 +85,28 @@ PAGE_PADX = SPACE_XL
 SECTION_PADY = SPACE_LG
 
 # =============================================================================
+# CABECERA Y NOTEBOOK (navegación)
+# =============================================================================
+
+HEADER_BG = BACKGROUND_PANEL
+HEADER_BORDER = BORDER_DEFAULT
+HEADER_PADY_TOP = SPACE_MD
+HEADER_PADY_BOTTOM = SPACE_SM
+HEADER_PADX = SPACE_XL
+
+NOTEBOOK_BG = BACKGROUND_APP
+TAB_BG = BACKGROUND_MUTED
+TAB_FG = TEXT_SECONDARY
+TAB_ACTIVE_BG = BACKGROUND_PANEL
+TAB_ACTIVE_FG = PRIMARY_INDIGO
+TAB_HOVER_BG = BACKGROUND_PANEL
+TAB_HOVER_FG = PRIMARY_INDIGO
+TAB_BORDER = BORDER_DEFAULT
+TAB_ACCENT = ACCENT_TEAL
+TAB_PADDING_X = 14
+TAB_PADDING_Y = 8
+
+# =============================================================================
 # ALIASES LEGACY — botones de ejecución (CorporateButton y consumidores actuales)
 # Conservar valores originales hasta migrar variantes en una fase posterior.
 # =============================================================================
@@ -175,6 +197,6 @@ BUTTON_VARIANTS = {
 # ALIASES LEGACY — superficies y títulos (redirigen al Light Indigo DS)
 # =============================================================================
 
-TOP_BG = BACKGROUND_APP
+TOP_BG = HEADER_BG
 FRAME_BG = BACKGROUND_APP
 TITLE_FG = PRIMARY_INDIGO

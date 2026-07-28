@@ -29,11 +29,26 @@ from config import set_ruta, get_ruta
 from ui.window_icon import set_window_icon
 from utils.resources import resource_path
 from ui.styles import (
+    ACCENT_TEAL,
     BACKGROUND_APP,
     BACKGROUND_MUTED,
-    BORDER_DEFAULT,
+    HEADER_BG,
+    HEADER_BORDER,
+    HEADER_PADX,
+    HEADER_PADY_BOTTOM,
+    HEADER_PADY_TOP,
+    NOTEBOOK_BG,
     PRIMARY_INDIGO,
-    TOP_BG,
+    TAB_ACCENT,
+    TAB_ACTIVE_BG,
+    TAB_ACTIVE_FG,
+    TAB_BG,
+    TAB_BORDER,
+    TAB_FG,
+    TAB_HOVER_BG,
+    TAB_HOVER_FG,
+    TAB_PADDING_X,
+    TAB_PADDING_Y,
 )
 
 
@@ -128,7 +143,7 @@ class App(tk.Tk):
         """Cabecera compacta con logo centrado sobre las pestañas."""
         LOGO_H = 65
 
-        header = tk.Frame(self.main_container, bg=TOP_BG)
+        header = tk.Frame(self.main_container, bg=HEADER_BG)
         header.pack(fill="x", side="top")
 
         self._logo_image = None
@@ -143,14 +158,17 @@ class App(tk.Tk):
             tk.Label(
                 header,
                 image=self._logo_image,
-                bg=TOP_BG,
+                bg=HEADER_BG,
                 bd=0,
                 highlightthickness=0,
-            ).pack(pady=(7, 7))
+            ).pack(
+                pady=(HEADER_PADY_TOP, HEADER_PADY_BOTTOM),
+                padx=HEADER_PADX,
+            )
         except Exception as exc:
             logger.warning(f"No se pudo cargar assets/logo.png: {exc}")
 
-        tk.Frame(self.main_container, height=1, bg=BORDER_DEFAULT).pack(
+        tk.Frame(self.main_container, height=1, bg=HEADER_BORDER).pack(
             fill="x", side="top"
         )
 
@@ -164,8 +182,56 @@ class App(tk.Tk):
             thickness=16,
         )
 
+        # Notebook y pestañas (tema "default": viable en macOS, Windows y Linux).
+        style.configure(
+            "DocFlow.TNotebook",
+            background=NOTEBOOK_BG,
+            borderwidth=0,
+            tabmargins=(4, 6, 4, 0),
+        )
+        style.configure(
+            "DocFlow.TNotebook.Tab",
+            background=TAB_BG,
+            foreground=TAB_FG,
+            bordercolor=TAB_BORDER,
+            lightcolor=TAB_BORDER,
+            darkcolor=TAB_BORDER,
+            padding=(TAB_PADDING_X, TAB_PADDING_Y),
+            borderwidth=1,
+            focuscolor=TAB_ACCENT,
+        )
+        # selected = activa; active = hover cuando el tema lo expone de forma fiable.
+        style.map(
+            "DocFlow.TNotebook.Tab",
+            background=[
+                ("selected", TAB_ACTIVE_BG),
+                ("active", TAB_HOVER_BG),
+            ],
+            foreground=[
+                ("selected", TAB_ACTIVE_FG),
+                ("active", TAB_HOVER_FG),
+            ],
+            bordercolor=[
+                ("selected", PRIMARY_INDIGO),
+                ("active", ACCENT_TEAL),
+            ],
+            lightcolor=[
+                ("selected", ACCENT_TEAL),
+                ("active", ACCENT_TEAL),
+            ],
+            darkcolor=[
+                ("selected", PRIMARY_INDIGO),
+            ],
+            expand=[
+                ("selected", (1, 1, 1, 0)),
+            ],
+        )
+
     def _crear_tabs(self):
-        self.notebook = ttk.Notebook(self.main_container)
+        self.notebook = ttk.Notebook(
+            self.main_container,
+            style="DocFlow.TNotebook",
+        )
         self.notebook.pack(fill="both", expand=True)
 
         self.tab_mbox = ttk.Frame(self.notebook)
