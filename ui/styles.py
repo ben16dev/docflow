@@ -246,6 +246,19 @@ ERROR_DIALOG_PADX = SPACE_LG
 ERROR_DIALOG_PADY = SPACE_MD
 
 # =============================================================================
+# DIÁLOGO CONFIGURACIÓN NUMERACIÓN PDF
+# =============================================================================
+
+CONFIG_DIALOG_BG = BACKGROUND_APP
+CONFIG_DIALOG_PANEL_BG = BACKGROUND_PANEL
+CONFIG_DIALOG_PANEL_BORDER = BORDER_DEFAULT
+CONFIG_DIALOG_TITLE_FG = PRIMARY_INDIGO
+CONFIG_DIALOG_LABEL_FG = TEXT_PRIMARY
+CONFIG_DIALOG_PADX = SPACE_MD
+CONFIG_DIALOG_PADY = SPACE_MD
+CONFIG_DIALOG_PREVIEW_BORDER = BORDER_DEFAULT
+
+# =============================================================================
 # ALIASES LEGACY — botones de ejecución (CorporateButton y consumidores actuales)
 # Conservar valores originales hasta migrar variantes en una fase posterior.
 # =============================================================================

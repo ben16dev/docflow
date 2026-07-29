@@ -1,7 +1,25 @@
 import tkinter as tk
 from tkinter import ttk, colorchooser, messagebox
 
+from ui.common import CorporateButton, create_toolbar_button
 from ui.exceptions import CancelledByUser
+from ui.styles import (
+    CONFIG_DIALOG_BG,
+    CONFIG_DIALOG_LABEL_FG,
+    CONFIG_DIALOG_PADX,
+    CONFIG_DIALOG_PADY,
+    CONFIG_DIALOG_PANEL_BG,
+    CONFIG_DIALOG_PANEL_BORDER,
+    CONFIG_DIALOG_PREVIEW_BORDER,
+    CONFIG_DIALOG_TITLE_FG,
+    FLOW_NOTICE_SAFE_BG,
+    FONT_SIZE_MD,
+    FONT_SIZE_SM,
+    SPACE_MD,
+    SPACE_SM,
+    SPACE_XS,
+    font_ui,
+)
 from ui.window_icon import set_window_icon
 
 
@@ -21,6 +39,7 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
     set_window_icon(win)
     win.transient(root)
     win.grab_set()
+    win.configure(bg=CONFIG_DIALOG_BG)
 
     # ======================================================
     # VARIABLES
@@ -46,8 +65,37 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
 
     result = {}
 
-    frm = ttk.Frame(win, padding=12)
+    frm = tk.Frame(
+        win,
+        bg=CONFIG_DIALOG_BG,
+        padx=CONFIG_DIALOG_PADX,
+        pady=CONFIG_DIALOG_PADY,
+    )
     frm.grid(row=0, column=0, sticky="nsew")
+
+    def _section_title(parent, text, **grid_opts):
+        lbl = tk.Label(
+            parent,
+            text=text,
+            bg=CONFIG_DIALOG_BG,
+            fg=CONFIG_DIALOG_TITLE_FG,
+            font=font_ui(FONT_SIZE_MD, "bold"),
+            anchor="w",
+        )
+        lbl.grid(**grid_opts)
+        return lbl
+
+    def _field_label(parent, text, **grid_opts):
+        lbl = tk.Label(
+            parent,
+            text=text,
+            bg=CONFIG_DIALOG_BG,
+            fg=CONFIG_DIALOG_LABEL_FG,
+            font=font_ui(FONT_SIZE_SM),
+            anchor="w",
+        )
+        lbl.grid(**grid_opts)
+        return lbl
 
     # ======================================================
     # UTILIDADES COLOR / PREVIEW
@@ -87,21 +135,33 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
     # PREVIEW
     # ======================================================
 
-    preview = tk.Canvas(
+    preview_wrap = tk.Frame(
         frm,
-        width=360,
-        height=120,
-        bg="white",
-        highlightthickness=1
+        bg=CONFIG_DIALOG_PANEL_BORDER,
+        highlightthickness=0,
+        bd=0,
     )
-
-    preview.grid(
+    preview_wrap.grid(
         row=0,
         column=0,
         columnspan=4,
-        pady=(0, 5),
-        sticky="ew"
+        sticky="ew",
+        pady=(0, SPACE_XS),
     )
+
+    preview_inner = tk.Frame(preview_wrap, bg=CONFIG_DIALOG_PANEL_BG)
+    preview_inner.pack(fill="both", expand=True, padx=1, pady=1)
+
+    preview = tk.Canvas(
+        preview_inner,
+        width=360,
+        height=120,
+        bg="white",
+        highlightthickness=1,
+        highlightbackground=CONFIG_DIALOG_PREVIEW_BORDER,
+    )
+
+    preview.pack(padx=SPACE_SM, pady=(SPACE_SM, SPACE_XS))
 
     def actualizar_preview():
 
@@ -172,28 +232,26 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
             anchor="w"
         )
 
-    ttk.Button(
-        frm,
+    btn_preview = create_toolbar_button(
+        preview_inner,
         text="Actualizar vista previa",
-        command=actualizar_preview
-    ).grid(
-        row=1,
-        column=0,
-        columnspan=4,
-        pady=(0, 10)
+        command=actualizar_preview,
+        variant="secondary",
     )
+    btn_preview.pack(pady=(0, SPACE_SM))
 
     # ======================================================
     # NUMERACIÓN
     # ======================================================
 
-    ttk.Label(
+    _section_title(
         frm,
-        text="Tipo de numeración:"
-    ).grid(
+        "Tipo de numeración:",
         row=2,
         column=0,
-        sticky="w"
+        columnspan=4,
+        sticky="w",
+        pady=(SPACE_SM, SPACE_XS),
     )
 
     ttk.Radiobutton(
@@ -247,7 +305,7 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
         column=1,
         rowspan=2,
         sticky="w",
-        padx=(8, 0)
+        padx=(SPACE_SM, 0)
     )
 
     def actualizar_estado_prefijo(*_):
@@ -264,26 +322,24 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
     prefijo_var.trace_add("write", lambda *_: actualizar_preview())
 
     # ======================================================
-    # POSICIÓN
+    # POSICIÓN + ESTILO (dos columnas)
     # ======================================================
 
-    ttk.Label(
+    _section_title(
         frm,
-        text="Posición:"
-    ).grid(
+        "Posición:",
         row=6,
         column=0,
         sticky="w",
-        pady=(10, 0)
+        pady=(SPACE_MD, SPACE_XS),
     )
 
-    ttk.Label(
+    _field_label(
         frm,
-        text="Vertical"
-    ).grid(
+        "Vertical",
         row=7,
         column=0,
-        sticky="w"
+        sticky="w",
     )
 
     cmb_vertical = ttk.Combobox(
@@ -297,17 +353,16 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
         row=7,
         column=1,
         sticky="w",
-        padx=(8, 0)
+        padx=(SPACE_SM, 0)
     )
     cmb_vertical.bind("<<ComboboxSelected>>", lambda _e: actualizar_preview())
 
-    ttk.Label(
+    _field_label(
         frm,
-        text="Horizontal"
-    ).grid(
+        "Horizontal",
         row=8,
         column=0,
-        sticky="w"
+        sticky="w",
     )
 
     cmb_horizontal = ttk.Combobox(
@@ -321,23 +376,18 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
         row=8,
         column=1,
         sticky="w",
-        padx=(8, 0)
+        padx=(SPACE_SM, 0)
     )
     cmb_horizontal.bind("<<ComboboxSelected>>", lambda _e: actualizar_preview())
 
-    # ======================================================
-    # ESTILO
-    # ======================================================
-
-    ttk.Label(
+    _section_title(
         frm,
-        text="Estilo:"
-    ).grid(
+        "Estilo:",
         row=6,
         column=2,
         sticky="w",
-        pady=(10, 0),
-        padx=(18, 0)
+        pady=(SPACE_MD, SPACE_XS),
+        padx=(18, 0),
     )
 
     fuentes = []
@@ -349,14 +399,13 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
         if f not in fuentes:
             fuentes.append(f)
 
-    ttk.Label(
+    _field_label(
         frm,
-        text="Fuente"
-    ).grid(
+        "Fuente",
         row=7,
         column=2,
         sticky="w",
-        padx=(18, 0)
+        padx=(18, 0),
     )
 
     cmb_fuente = ttk.Combobox(
@@ -373,14 +422,13 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
     )
     cmb_fuente.bind("<<ComboboxSelected>>", lambda _e: actualizar_preview())
 
-    ttk.Label(
+    _field_label(
         frm,
-        text="Tamaño"
-    ).grid(
+        "Tamaño",
         row=8,
         column=2,
         sticky="w",
-        padx=(18, 0)
+        padx=(18, 0),
     )
 
     spn_size = ttk.Spinbox(
@@ -409,7 +457,7 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
         columnspan=2,
         sticky="w",
         padx=(18, 0),
-        pady=(6, 0)
+        pady=(SPACE_SM, 0)
     )
 
     ttk.Checkbutton(
@@ -460,28 +508,29 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
             )
             actualizar_preview()
 
-    ttk.Button(
-        frm,
-        text="Color texto",
-        command=elegir_color_texto
-    ).grid(
+    color_row = tk.Frame(frm, bg=CONFIG_DIALOG_BG)
+    color_row.grid(
         row=11,
         column=2,
+        columnspan=2,
         sticky="w",
         padx=(18, 0),
-        pady=(8, 0)
+        pady=(SPACE_SM, 0),
     )
 
-    ttk.Button(
-        frm,
+    create_toolbar_button(
+        color_row,
+        text="Color texto",
+        command=elegir_color_texto,
+        variant="secondary",
+    ).pack(side="left", padx=(0, SPACE_SM))
+
+    create_toolbar_button(
+        color_row,
         text="Color fondo",
-        command=elegir_color_fondo
-    ).grid(
-        row=11,
-        column=3,
-        sticky="w",
-        pady=(8, 0)
-    )
+        command=elegir_color_fondo,
+        variant="secondary",
+    ).pack(side="left")
 
     # ======================================================
     # PROCESAMIENTO
@@ -492,17 +541,16 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
         column=0,
         columnspan=4,
         sticky="ew",
-        pady=(14, 6)
+        pady=(SPACE_MD, SPACE_SM)
     )
 
-    ttk.Label(
+    _section_title(
         frm,
-        text="Opciones de procesamiento:"
-    ).grid(
+        "Opciones de procesamiento:",
         row=15,
         column=0,
-        columnspan=2,
-        sticky="w"
+        columnspan=4,
+        sticky="w",
     )
 
     ttk.Checkbutton(
@@ -517,30 +565,33 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
         pady=2
     )
 
-    ttk.Checkbutton(
-        frm,
-        text="Eliminar originales tras procesar (⚠ irreversible)",
-        variable=eliminar_var
-    ).grid(
+    aviso = tk.Frame(frm, bg=FLOW_NOTICE_SAFE_BG)
+    aviso.grid(
         row=17,
         column=0,
         columnspan=4,
-        sticky="w",
-        pady=2
+        sticky="ew",
+        pady=(SPACE_XS, 0),
     )
+
+    ttk.Checkbutton(
+        aviso,
+        text="Eliminar originales tras procesar (⚠ irreversible)",
+        variable=eliminar_var
+    ).pack(anchor="w", padx=SPACE_SM, pady=SPACE_XS)
 
     # ======================================================
     # BOTONES
     # ======================================================
 
-    btns = ttk.Frame(frm)
+    btns = tk.Frame(frm, bg=CONFIG_DIALOG_BG)
 
     btns.grid(
         row=22,
         column=0,
         columnspan=4,
         sticky="e",
-        pady=(14, 0)
+        pady=(SPACE_MD, 0)
     )
 
     def aceptar():
@@ -578,24 +629,25 @@ def solicitar_configuracion(font_default: str, pymupdf_disponible=None):
 
     win.protocol("WM_DELETE_WINDOW", cancelar)
 
-    ttk.Button(
+    CorporateButton(
         btns,
         text="Cancelar",
-        command=cancelar
-    ).grid(
-        row=0,
-        column=0,
-        padx=(0, 8)
-    )
+        command=cancelar,
+        variant="secondary",
+        width=None,
+        padx=12,
+        pady=6,
+    ).pack(side="left", padx=(0, SPACE_SM))
 
-    ttk.Button(
+    CorporateButton(
         btns,
         text="Aceptar",
-        command=aceptar
-    ).grid(
-        row=0,
-        column=1
-    )
+        command=aceptar,
+        variant="diagnostic",
+        width=None,
+        padx=12,
+        pady=6,
+    ).pack(side="left")
 
     actualizar_estado_prefijo()
     actualizar_preview()
