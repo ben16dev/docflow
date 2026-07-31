@@ -33,13 +33,19 @@ class ScriptRunner:
 
                 on_success(resultado)
 
-            except CancelledByUser:
+            except CancelledByUser as exc:
                 logger.info("[ScriptRunner] Cancelado por usuario")
-                resultado_cancelado = {
-                    "message": "Cancelado",
-                    "output_dir": None,
-                    "stats": {}
-                }
+                resultado_cancelado = getattr(
+                    exc,
+                    "result",
+                    None,
+                )
+                if resultado_cancelado is None:
+                    resultado_cancelado = {
+                        "message": "Cancelado",
+                        "output_dir": None,
+                        "stats": {}
+                    }
                 if callable(on_cancelled):
                     on_cancelled(resultado_cancelado)
                 else:

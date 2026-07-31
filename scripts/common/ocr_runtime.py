@@ -55,7 +55,7 @@ OCR_BASE_FLAGS: tuple[str, ...] = (
     "--no-progress-bar",
 )
 
-# Nombre del directorio portable empaquetado (futuro Windows / frozen).
+# Nombre del directorio portable empaquetado (frozen / futuro Windows).
 BUNDLED_TESSERACT_DIRNAME = "tesseract_bundle"
 
 
@@ -69,29 +69,84 @@ def _meipass() -> Optional[Path]:
     return None
 
 
+def _frozen_search_roots() -> list[Path]:
+    """
+    Raíces candidatas donde PyInstaller puede colocar binarios y datas.
+
+    Cubre onedir clásico, `_internal`, Contents/MacOS y Contents/Resources.
+    """
+    roots: list[Path] = []
+    meipass = _meipass()
+    if meipass is not None:
+        roots.append(meipass)
+
+    exe = Path(sys.executable)
+    exe_dir = exe.parent
+    roots.append(exe_dir)
+    roots.append(exe_dir / "_internal")
+
+    # DocFlow.app/Contents/MacOS → Contents/Resources[/_internal]
+    if exe_dir.name == "MacOS":
+        contents = exe_dir.parent
+        resources = contents / "Resources"
+        roots.append(resources)
+        roots.append(resources / "_internal")
+        roots.append(contents / "Frameworks")
+
+    # Deduplicar conservando orden.
+    seen: set[Path] = set()
+    ordered: list[Path] = []
+    for root in roots:
+        try:
+            key = root.resolve()
+        except OSError:
+            key = root
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(root)
+    return ordered
+
+
 def _bundled_tesseract_root() -> Optional[Path]:
     """Raíz del runtime Tesseract empaquetado, si existe."""
-    base = _meipass()
-    if base is None:
+    if not _is_frozen():
         return None
-    candidate = base / BUNDLED_TESSERACT_DIRNAME
-    return candidate if candidate.is_dir() else None
+    for root in _frozen_search_roots():
+        candidate = root / BUNDLED_TESSERACT_DIRNAME
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def _bundled_ocrmypdf_candidates() -> list[Path]:
+    """Candidatos del helper OCRmyPDF empaquetado."""
+    names = ("ocrmypdf", "ocrmypdf.exe")
+    candidates: list[Path] = []
+    for root in _frozen_search_roots():
+        for name in names:
+            candidates.append(root / name)
+    return candidates
 
 
 def locate_ocrmypdf() -> LocatedBinary:
     """
     Localiza el ejecutable OCRmyPDF.
 
-    Preferencia: binario junto al intérprete (venv / frozen) → PATH.
-    No se usa Path.resolve() sobre sys.executable para no salir del venv
-    cuando el intérprete es un symlink a Homebrew/pyenv.
+    Frozen: solo helper empaquetado (sin fallback a venv/PATH del sistema).
+    Desarrollo: binario junto al intérprete (venv) → PATH.
     """
+    if _is_frozen():
+        for path in _bundled_ocrmypdf_candidates():
+            if path.is_file():
+                return LocatedBinary(path=path, origin=DependencyOrigin.BUNDLED)
+        return LocatedBinary(path=None, origin=DependencyOrigin.MISSING)
+
     candidates: list[tuple[Path, DependencyOrigin]] = []
 
     exe_dir = Path(sys.executable).parent
     for name in ("ocrmypdf", "ocrmypdf.exe"):
-        origin = DependencyOrigin.BUNDLED if _is_frozen() else DependencyOrigin.SYSTEM
-        candidates.append((exe_dir / name, origin))
+        candidates.append((exe_dir / name, DependencyOrigin.SYSTEM))
 
     # sys.prefix/bin cubre venvs donde el ejecutable no está junto al python.
     prefix_bin = Path(sys.prefix) / "bin"
@@ -100,11 +155,6 @@ def locate_ocrmypdf() -> LocatedBinary:
     prefix_scripts = Path(sys.prefix) / "Scripts"  # Windows venv
     for name in ("ocrmypdf", "ocrmypdf.exe"):
         candidates.append((prefix_scripts / name, DependencyOrigin.SYSTEM))
-
-    meipass = _meipass()
-    if meipass is not None:
-        for name in ("ocrmypdf", "ocrmypdf.exe"):
-            candidates.append((meipass / name, DependencyOrigin.BUNDLED))
 
     seen: set[Path] = set()
     for path, origin in candidates:
@@ -129,15 +179,17 @@ def locate_tesseract() -> LocatedBinary:
     """
     Localiza el ejecutable Tesseract.
 
-    macOS (desarrollo): sistema (Homebrew / PATH).
-    Frozen / Windows: bundle portable si está presente; si no, PATH.
+    Frozen: solo tesseract_bundle (sin Homebrew).
+    Desarrollo: sistema (Homebrew / PATH).
     """
-    bundled = _bundled_tesseract_root()
-    if bundled is not None:
-        for name in ("tesseract", "tesseract.exe"):
-            candidate = bundled / name
-            if candidate.is_file():
-                return LocatedBinary(path=candidate, origin=DependencyOrigin.BUNDLED)
+    if _is_frozen():
+        bundled = _bundled_tesseract_root()
+        if bundled is not None:
+            for name in ("tesseract", "tesseract.exe"):
+                candidate = bundled / name
+                if candidate.is_file():
+                    return LocatedBinary(path=candidate, origin=DependencyOrigin.BUNDLED)
+        return LocatedBinary(path=None, origin=DependencyOrigin.MISSING)
 
     # macOS / Linux: rutas habituales de Homebrew antes del PATH genérico.
     system = platform.system()
@@ -160,11 +212,13 @@ def locate_tessdata(*, language: str = "spa") -> LocatedTessdata:
     """
     Localiza el directorio tessdata que contiene el idioma solicitado.
     """
-    bundled = _bundled_tesseract_root()
-    if bundled is not None:
-        td = bundled / "tessdata"
-        if (td / f"{language}.traineddata").is_file():
-            return LocatedTessdata(path=td, origin=DependencyOrigin.BUNDLED)
+    if _is_frozen():
+        bundled = _bundled_tesseract_root()
+        if bundled is not None:
+            td = bundled / "tessdata"
+            if (td / f"{language}.traineddata").is_file():
+                return LocatedTessdata(path=td, origin=DependencyOrigin.BUNDLED)
+        return LocatedTessdata(path=None, origin=DependencyOrigin.MISSING)
 
     system = platform.system()
     candidates: list[Path] = []
@@ -189,8 +243,6 @@ def locate_tessdata(*, language: str = "spa") -> LocatedTessdata:
     if tess.path is not None:
         parent = tess.path.resolve().parent
         candidates.append(parent.parent / "share" / "tessdata")
-        if tess.origin == DependencyOrigin.BUNDLED:
-            candidates.insert(0, parent / "tessdata")
 
     env_prefix = os.environ.get("TESSDATA_PREFIX")
     if env_prefix:
@@ -206,12 +258,7 @@ def locate_tessdata(*, language: str = "spa") -> LocatedTessdata:
             continue
         seen.add(resolved)
         if (resolved / f"{language}.traineddata").is_file():
-            origin = (
-                DependencyOrigin.BUNDLED
-                if bundled is not None and str(resolved).startswith(str(bundled.resolve()))
-                else DependencyOrigin.SYSTEM
-            )
-            return LocatedTessdata(path=resolved, origin=origin)
+            return LocatedTessdata(path=resolved, origin=DependencyOrigin.SYSTEM)
 
     return LocatedTessdata(path=None, origin=DependencyOrigin.MISSING)
 
@@ -229,11 +276,17 @@ def require_runtime(*, language: str = "spa") -> tuple[LocatedBinary, LocatedBin
 
     tesseract = locate_tesseract()
     if tesseract.path is None:
-        raise OcrDependencyError(
-            "missing_tesseract",
-            "No se encontró Tesseract. En macOS instálalo con Homebrew "
-            "(tesseract / tesseract-lang).",
-        )
+        if _is_frozen():
+            message = (
+                "No se encontró Tesseract empaquetado. "
+                "Reinstala DocFlow o regenera el build."
+            )
+        else:
+            message = (
+                "No se encontró Tesseract. En macOS instálalo con Homebrew "
+                "(tesseract / tesseract-lang)."
+            )
+        raise OcrDependencyError("missing_tesseract", message)
 
     tessdata = locate_tessdata(language=language)
     if tessdata.path is None:
@@ -283,8 +336,12 @@ def build_subprocess_env(
     Construye un entorno específico para el subproceso OCR.
 
     Copia el entorno base; no modifica os.environ.
+    No usa DYLD_LIBRARY_PATH como estrategia principal: las dylibs deben
+    resolverse vía install names / rpaths del bundle.
     """
-    env: dict[str, str] = dict(base_environ if base_environ is not None else os.environ)
+    env: dict[str, str] = dict(
+        base_environ if base_environ is not None else os.environ
+    )
 
     if tesseract is None:
         tesseract = locate_tesseract()
@@ -295,13 +352,15 @@ def build_subprocess_env(
 
     if tesseract.path is not None:
         path_parts.append(str(tesseract.path.parent))
-        # En bundle macOS, las dylibs pueden estar en lib/ junto al binario.
-        lib_dir = tesseract.path.parent / "lib"
-        if lib_dir.is_dir():
-            existing = env.get("DYLD_FALLBACK_LIBRARY_PATH", "")
-            env["DYLD_FALLBACK_LIBRARY_PATH"] = (
-                str(lib_dir) + (os.pathsep + existing if existing else "")
-            )
+
+    if _is_frozen():
+        # Helper OCRmyPDF junto a DocFlow / Contents/MacOS.
+        for root in _frozen_search_roots():
+            helper = root / "ocrmypdf"
+            if helper.is_file():
+                helper_dir = str(helper.parent)
+                if helper_dir not in path_parts:
+                    path_parts.append(helper_dir)
 
     bundled = _bundled_tesseract_root()
     if bundled is not None and str(bundled) not in path_parts:
@@ -309,7 +368,9 @@ def build_subprocess_env(
 
     if path_parts:
         current_path = env.get("PATH", "")
-        env["PATH"] = os.pathsep.join(path_parts + ([current_path] if current_path else []))
+        env["PATH"] = os.pathsep.join(
+            path_parts + ([current_path] if current_path else [])
+        )
 
     if tessdata.path is not None:
         env["TESSDATA_PREFIX"] = str(tessdata.path)

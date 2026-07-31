@@ -312,6 +312,13 @@ class App(tk.Tk):
         self.historial.appendleft(nombre_script)
         self.status_bar.update_history(list(self.historial))
 
+    def _estado_resultado(self, stats):
+        if not isinstance(stats, dict):
+            return "success"
+        if stats.get("errores", 0) or stats.get("omitidos", 0):
+            return "error"
+        return "success"
+
     def _mostrar_ultimo_proceso(self):
         if not self.last_result:
             messagebox.showinfo(
@@ -493,7 +500,7 @@ class App(tk.Tk):
             }
 
             self._call_ui(self.status_bar.set_status, mensaje)
-            self._call_ui(self.status_bar.set_state, "success")
+            self._call_ui(self.status_bar.set_state, self._estado_resultado(stats))
             self._call_ui(self.progress_panel.complete_progress)
 
             if carpeta:
@@ -531,16 +538,7 @@ class App(tk.Tk):
             self._call_ui(self.progress_panel.reset_progress)
 
         def on_cancelled(resultado=None):
-            self.last_result = {
-                "script_name": nombre_script,
-                "message": "Cancelado",
-                "output_dir": None,
-                "stats": (resultado or {}).get("stats", {}) if isinstance(resultado, dict) else {},
-            }
-
-            self._call_ui(self.status_bar.set_status, "Cancelado")
-            self._call_ui(self.status_bar.set_state, "cancelado")
-            self._call_ui(self.progress_panel.reset_progress)
+            self._aplicar_resultado_cancelado(nombre_script, resultado)
 
         def on_finally():
             self._call_ui(self.config, cursor="")
@@ -615,7 +613,7 @@ class App(tk.Tk):
             }
 
             self._call_ui(self.status_bar.set_status, mensaje)
-            self._call_ui(self.status_bar.set_state, "success")
+            self._call_ui(self.status_bar.set_state, self._estado_resultado(stats))
             self._call_ui(self.progress_panel.complete_progress)
 
             if carpeta:
@@ -653,16 +651,7 @@ class App(tk.Tk):
             self._call_ui(self.progress_panel.reset_progress)
 
         def on_cancelled(resultado=None):
-            self.last_result = {
-                "script_name": nombre_script,
-                "message": "Cancelado",
-                "output_dir": None,
-                "stats": (resultado or {}).get("stats", {}) if isinstance(resultado, dict) else {},
-            }
-
-            self._call_ui(self.status_bar.set_status, "Cancelado")
-            self._call_ui(self.status_bar.set_state, "cancelado")
-            self._call_ui(self.progress_panel.reset_progress)
+            self._aplicar_resultado_cancelado(nombre_script, resultado)
 
         def on_finally():
             self._call_ui(self.config, cursor="")
@@ -680,6 +669,33 @@ class App(tk.Tk):
             on_cancelled=on_cancelled,
             on_finally=on_finally,
         )
+
+    def _aplicar_resultado_cancelado(self, nombre_script, resultado=None):
+        """
+        Aplica un resultado de cancelación sin tratarlo como éxito.
+
+        Conserva output_dir, files y stats parciales cuando existen.
+        """
+        payload = resultado if isinstance(resultado, dict) else {}
+        carpeta = payload.get("output_dir")
+        stats = payload.get("stats") or {}
+        files = payload.get("files")
+
+        self.last_result = {
+            "script_name": nombre_script,
+            "message": "Cancelado",
+            "output_dir": carpeta,
+            "stats": stats,
+        }
+        if files is not None:
+            self.last_result["files"] = files
+
+        self._call_ui(self.status_bar.set_status, "Cancelado")
+        self._call_ui(self.status_bar.set_state, "cancelado")
+        self._call_ui(self.progress_panel.reset_progress)
+
+        if carpeta:
+            self._call_ui(self.status_bar.enable_open_button, carpeta)
 
 
 if __name__ == "__main__":

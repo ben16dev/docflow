@@ -135,6 +135,35 @@ killall Dock
 open dist/DocFlow.app
 ```
 
+### Empaquetado OCR (macOS)
+
+Estado actual: validado en macOS arm64.
+
+El build de macOS incluye el runtime OCR dentro de `DocFlow.app` (PyInstaller onedir + BUNDLE):
+
+- helper `ocrmypdf` en `Contents/MacOS/ocrmypdf`;
+- Tesseract y dylibs asociados en el bundle (`tesseract_bundle`, `libtesseract`);
+- `spa.traineddata` y `tessdata/configs` incluidos.
+
+Requisito en el equipo de build: Tesseract instalado (para copiar binario, dylibs y tessdata al bundle).
+
+Comando de build definitivo:
+
+```bash
+.venv/bin/python -m PyInstaller DocFlow.spec --noconfirm --clean
+```
+
+Validación funcional del artefacto:
+
+- ejecución fuera del repositorio;
+- ejecución sin Homebrew en PATH.
+
+Limitaciones actuales:
+
+- x86_64 no validado;
+- firma y notarización pendientes (el build puede emitir un warning de `codesign` ad hoc; fuera de alcance de este empaquetado);
+- Windows pendiente.
+
 ---
 
 ## Windows

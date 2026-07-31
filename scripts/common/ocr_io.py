@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import os
 import secrets
+import stat
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -221,12 +223,51 @@ def validate_ocr_output(
     )
 
 
+def ensure_output_visible(path: Path) -> None:
+    """
+    En macOS, elimina únicamente UF_HIDDEN del archivo final.
+
+    Los temporales `.docflow_ocr_*` heredan UF_HIDDEN; os.replace conserva
+    el inode y el flag, así que el PDF final seguiría oculto en Finder.
+    En otros sistemas es un no-op seguro.
+    """
+    path = Path(path)
+    if sys.platform != "darwin":
+        return
+
+    try:
+        current_flags = path.stat().st_flags
+    except OSError as exc:
+        raise OcrValidationError(
+            "hidden_flag_clear_failed",
+            "No se pudo comprobar la visibilidad del PDF OCR generado.",
+        ) from exc
+
+    if not (current_flags & stat.UF_HIDDEN):
+        return
+
+    try:
+        os.chflags(path, current_flags & ~stat.UF_HIDDEN)
+        remaining = path.stat().st_flags
+    except OSError as exc:
+        raise OcrValidationError(
+            "hidden_flag_clear_failed",
+            "No se pudo hacer visible el PDF OCR generado.",
+        ) from exc
+
+    if remaining & stat.UF_HIDDEN:
+        raise OcrValidationError(
+            "hidden_flag_clear_failed",
+            "No se pudo hacer visible el PDF OCR generado.",
+        )
+
+
 def promote_temp_to_final(temp_path: Path, final_path: Path) -> Path:
     """
     Promueve el temporal al nombre final con replace atómico en el mismo volumen.
 
     Si final_path ya existiera (condición de carrera), se resuelve colisión.
-    Verifica que el archivo final exista tras el replace.
+    Verifica que el archivo final exista tras el replace y no quede UF_HIDDEN.
     """
     temp_path = Path(temp_path)
     final_path = Path(final_path)
@@ -246,7 +287,30 @@ def promote_temp_to_final(temp_path: Path, final_path: Path) -> Path:
             "El OCR terminó, pero no se encontró el archivo final tras la promoción.",
         )
 
+    # Tras replace el inode conserva UF_HIDDEN del temporal con punto.
+    # Si falla, el PDF ya promovido se conserva y la incidencia se propaga.
+    ensure_output_visible(final_path)
+
     return final_path
+
+
+def assert_output_not_source(output_path: Path, source_path: Path) -> None:
+    """Postcondición: una salida OCR nunca puede ser el PDF de entrada."""
+    output_path = Path(output_path)
+    source_path = Path(source_path)
+
+    try:
+        if output_path.resolve() == source_path.resolve():
+            raise OcrValidationError(
+                "output_matches_source",
+                "La salida OCR coincide con el PDF de entrada.",
+            )
+    except FileNotFoundError:
+        if output_path.absolute() == source_path.absolute():
+            raise OcrValidationError(
+                "output_matches_source",
+                "La salida OCR coincide con el PDF de entrada.",
+            )
 
 
 def assert_final_in_destination(final_path: Path, output_dir: Path) -> Path:

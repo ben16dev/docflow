@@ -158,6 +158,41 @@ def test_runner_calls_on_cancelled_not_success_or_error():
     assert cancelled_calls[0]["message"] == "Cancelado"
 
 
+def test_runner_forwards_partial_cancelled_result():
+    """ScriptRunner reenvía el resultado parcial adjunto a CancelledByUser."""
+    partial = {
+        "message": "Cancelado",
+        "output_dir": "/tmp/docflow-out",
+        "stats": {"total": 2, "procesados": 1, "errores": 0, "omitidos": 1},
+        "files": ["/tmp/docflow-out/a_ocr.pdf"],
+    }
+
+    class CancelWithResult(CancelledByUser):
+        def __init__(self, result):
+            self.result = result
+            super().__init__("Cancelado")
+
+    cancelled_calls = []
+    success_calls = []
+    finished = {"done": False}
+
+    runner = ScriptRunner()
+    runner.run(
+        funcion=lambda **kwargs: (_ for _ in ()).throw(CancelWithResult(partial)),
+        progress=None,
+        is_cancelled=None,
+        on_success=lambda resultado: success_calls.append(resultado),
+        on_error=lambda payload: None,
+        on_cancelled=lambda resultado: cancelled_calls.append(resultado),
+        on_finally=lambda: finished.__setitem__("done", True),
+    )
+    runner._thread.join(timeout=5)
+
+    assert finished["done"] is True
+    assert success_calls == []
+    assert cancelled_calls == [partial]
+
+
 def test_runner_falls_back_to_on_success_when_on_cancelled_missing():
     """Compatibilidad: si un llamador no pasa on_cancelled, la cancelación
     sigue notificándose por on_success con el mensaje 'Cancelado'."""
@@ -176,6 +211,35 @@ def test_runner_falls_back_to_on_success_when_on_cancelled_missing():
     runner._thread.join(timeout=5)
 
     assert finished["done"] is True
+    assert len(success_calls) == 1
+    assert success_calls[0]["message"] == "Cancelado"
+
+
+def test_non_ocr_tools_still_return_cancelled_via_success_path():
+    """Herramientas no OCR que capturan CancelledByUser siguen por on_success."""
+    from scripts.common.results import build_cancelled_result
+
+    success_calls = []
+    cancelled_calls = []
+    finished = {"done": False}
+
+    def tool_like_mbox(**kwargs):
+        return build_cancelled_result(output_dir=None, total=0, procesados=0, errores=0)
+
+    runner = ScriptRunner()
+    runner.run(
+        funcion=tool_like_mbox,
+        progress=None,
+        is_cancelled=None,
+        on_success=lambda resultado: success_calls.append(resultado),
+        on_error=lambda payload: None,
+        on_cancelled=lambda resultado: cancelled_calls.append(resultado),
+        on_finally=lambda: finished.__setitem__("done", True),
+    )
+    runner._thread.join(timeout=5)
+
+    assert finished["done"] is True
+    assert cancelled_calls == []
     assert len(success_calls) == 1
     assert success_calls[0]["message"] == "Cancelado"
 
