@@ -235,6 +235,14 @@ def ensure_output_visible(path: Path) -> None:
     if sys.platform != "darwin":
         return
 
+    chflags = getattr(os, "chflags", None)
+    uf_hidden = getattr(stat, "UF_HIDDEN", None)
+    if chflags is None or uf_hidden is None:
+        raise OcrValidationError(
+            "hidden_flag_clear_failed",
+            "No se pudo hacer visible el PDF OCR generado.",
+        )
+
     try:
         current_flags = path.stat().st_flags
     except OSError as exc:
@@ -243,11 +251,11 @@ def ensure_output_visible(path: Path) -> None:
             "No se pudo comprobar la visibilidad del PDF OCR generado.",
         ) from exc
 
-    if not (current_flags & stat.UF_HIDDEN):
+    if not (current_flags & uf_hidden):
         return
 
     try:
-        os.chflags(path, current_flags & ~stat.UF_HIDDEN)
+        chflags(path, current_flags & ~uf_hidden)
         remaining = path.stat().st_flags
     except OSError as exc:
         raise OcrValidationError(
@@ -255,7 +263,7 @@ def ensure_output_visible(path: Path) -> None:
             "No se pudo hacer visible el PDF OCR generado.",
         ) from exc
 
-    if remaining & stat.UF_HIDDEN:
+    if remaining & uf_hidden:
         raise OcrValidationError(
             "hidden_flag_clear_failed",
             "No se pudo hacer visible el PDF OCR generado.",

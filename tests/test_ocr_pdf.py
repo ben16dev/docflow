@@ -11,6 +11,7 @@ import hashlib
 import logging
 import os
 import shutil
+import stat
 import sys
 import threading
 from pathlib import Path
@@ -411,8 +412,11 @@ def test_ensure_output_visible_noop_when_not_hidden(tmp_path, monkeypatch):
         st_flags = 0
 
     monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(stat, "UF_HIDDEN", 0x8000, raising=False)
     monkeypatch.setattr(Path, "stat", lambda self, *a, **k: _Stat())
-    monkeypatch.setattr(os, "chflags", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(
+        os, "chflags", lambda *a, **k: calls.append(a), raising=False
+    )
 
     ensure_output_visible(path)
     assert calls == []
@@ -421,13 +425,94 @@ def test_ensure_output_visible_noop_when_not_hidden(tmp_path, monkeypatch):
 def test_ensure_output_visible_noop_outside_macos(tmp_path, monkeypatch):
     path = tmp_path / "other.pdf"
     path.write_bytes(b"%PDF-1.4")
-    calls = []
 
     monkeypatch.setattr(sys, "platform", "linux")
-    monkeypatch.setattr(os, "chflags", lambda *a, **k: calls.append(a))
 
     ensure_output_visible(path)
-    assert calls == []
+
+
+def test_ensure_output_visible_clears_uf_hidden_simulated_darwin(tmp_path, monkeypatch):
+    uf_hidden = 0x8000
+    uf_nodump = 0x0001
+    path = tmp_path / "hidden.pdf"
+    path.write_bytes(b"%PDF-1.4")
+    calls = []
+    current_flags = [uf_hidden | uf_nodump]
+
+    class _Stat:
+        @property
+        def st_flags(self):
+            return current_flags[0]
+
+    def fake_chflags(_path, flags):
+        calls.append(flags)
+        current_flags[0] = flags
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(stat, "UF_HIDDEN", uf_hidden, raising=False)
+    monkeypatch.setattr(Path, "stat", lambda self, *a, **k: _Stat())
+    monkeypatch.setattr(os, "chflags", fake_chflags, raising=False)
+
+    ensure_output_visible(path)
+
+    assert calls == [uf_nodump]
+    assert not (current_flags[0] & uf_hidden)
+    assert current_flags[0] & uf_nodump
+
+
+def test_ensure_output_visible_missing_chflags_raises(tmp_path, monkeypatch):
+    uf_hidden = 0x8000
+    path = tmp_path / "hidden.pdf"
+    path.write_bytes(b"%PDF-1.4")
+
+    class _Stat:
+        st_flags = uf_hidden
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(stat, "UF_HIDDEN", uf_hidden, raising=False)
+    monkeypatch.setattr(Path, "stat", lambda self, *a, **k: _Stat())
+    monkeypatch.delattr(os, "chflags", raising=False)
+
+    with pytest.raises(OcrValidationError) as excinfo:
+        ensure_output_visible(path)
+
+    assert excinfo.value.category == "hidden_flag_clear_failed"
+
+
+def test_ensure_output_visible_missing_uf_hidden_raises(tmp_path, monkeypatch):
+    path = tmp_path / "plain.pdf"
+    path.write_bytes(b"%PDF-1.4")
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.delattr(stat, "UF_HIDDEN", raising=False)
+    monkeypatch.setattr(os, "chflags", lambda *a, **k: None, raising=False)
+
+    with pytest.raises(OcrValidationError) as excinfo:
+        ensure_output_visible(path)
+
+    assert excinfo.value.category == "hidden_flag_clear_failed"
+
+
+def test_ensure_output_visible_chflags_failure_raises(tmp_path, monkeypatch):
+    uf_hidden = 0x8000
+    path = tmp_path / "hidden.pdf"
+    path.write_bytes(b"%PDF-1.4")
+
+    class _Stat:
+        st_flags = uf_hidden
+
+    def boom(*args, **kwargs):
+        raise OSError("chflags denied")
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(stat, "UF_HIDDEN", uf_hidden, raising=False)
+    monkeypatch.setattr(Path, "stat", lambda self, *a, **k: _Stat())
+    monkeypatch.setattr(os, "chflags", boom, raising=False)
+
+    with pytest.raises(OcrValidationError) as excinfo:
+        ensure_output_visible(path)
+
+    assert excinfo.value.category == "hidden_flag_clear_failed"
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="Requiere filesystem macOS con UF_HIDDEN")
