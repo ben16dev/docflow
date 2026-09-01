@@ -50,19 +50,6 @@ SCRIPTS = {
 
     },
 
-    "EML": {
-
-        "EML a PDF": eml_a_pdf,
-
-    },
-
-    "MBOX": {
-
-        "MBOX a EML": mbox_a_eml,
-        "Extraer adjuntos de MBOX": extraer_con_adjuntos,
-
-    },
-
     "ARCHIVOS": {
 
         "Renombrar archivos": renombrar_archivos,
@@ -73,6 +60,9 @@ SCRIPTS = {
 
         "Imagen a PDF": img_a_pdf,
         "PDF escaneado a PDF OCR": ocr_pdf,
+        "MBOX a EML": mbox_a_eml,
+        "Extraer adjuntos de MBOX": extraer_con_adjuntos,
+        "EML a PDF": eml_a_pdf,
 
     },
 

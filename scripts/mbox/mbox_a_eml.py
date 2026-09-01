@@ -1,6 +1,6 @@
 SCRIPT_META = {
     "name": "MBOX a EML",
-    "category": "MBOX"
+    "category": "CONVERSIÓN"
 }
 
 import mailbox

@@ -50,7 +50,7 @@ Todos los documentos se procesan **localmente en el equipo del usuario**. DocFlo
 * Gestión de archivos adjuntos.
 * Exportación organizada de resultados.
 
-### Archivos
+### RENOMBRADO
 
 * Selección múltiple de archivos.
 * Reordenación de elementos.

@@ -36,9 +36,26 @@ _CONVERSION_DESCRIPTIONS = {
         "Añade capa de texto a PDFs escaneados "
         "(elige PDF y carpeta destino; no requiere carpeta de trabajo)."
     ),
+    "MBOX a EML": "Extrae correos individuales (.eml) desde un archivo MBOX.",
+    "Extraer adjuntos de MBOX": (
+        "Por cada correo crea una carpeta con el PDF del correo, "
+        "el .eml original y todos los adjuntos."
+    ),
+    "EML a PDF": (
+        "Convierte correos electrónicos a PDF. "
+        "Recomendado tras extraer EML desde un archivo MBOX."
+    ),
 }
 
-# Dos herramientas: dos columnas equilibradas.
+# Orden de herramientas.
+_TOOL_ORDER = [
+    "Imagen a PDF",
+    "PDF escaneado a PDF OCR",
+    "MBOX a EML",
+    "Extraer adjuntos de MBOX",
+    "EML a PDF",
+]
+
 _GRID_COLS = 2
 
 
@@ -88,25 +105,33 @@ def _build_cards(parent, app):
     scripts = get_scripts("CONVERSIÓN")
     cards = []
 
-    for i, (texto, module) in enumerate(scripts.items()):
+    for i, tool_name in enumerate(_TOOL_ORDER):
+        # Obtener módulo del registro
+        module = scripts.get(tool_name)
+        if module is None:
+            continue
+
         funcion = getattr(module, "run", None)
         if funcion is None:
             continue
 
-        if texto in _SELF_CONTAINED_TOOLS:
+        # Determinar executor
+        if tool_name in _SELF_CONTAINED_TOOLS:
             executor = app._ejecutar_herramienta
         else:
             executor = app._ejecutar
 
+        # Calcular posición en grid
         row = i // _GRID_COLS
         col = i % _GRID_COLS
-        description = _CONVERSION_DESCRIPTIONS.get(texto, "")
+
+        description = _CONVERSION_DESCRIPTIONS.get(tool_name, "")
 
         card = ToolCard(
             grid,
-            title=texto,
+            title=tool_name,
             description=description,
-            command=lambda f=funcion, a=texto, ex=executor: ex(
+            command=lambda f=funcion, a=tool_name, ex=executor: ex(
                 f,
                 tab="CONVERSIÓN",
                 action=a,
@@ -121,7 +146,8 @@ def _build_cards(parent, app):
         )
         cards.append(card)
 
+    # Configurar peso de filas: weight=0 para que usen altura natural
     for row in range((len(cards) + _GRID_COLS - 1) // _GRID_COLS):
-        grid.grid_rowconfigure(row, weight=1)
+        grid.grid_rowconfigure(row, weight=0)
 
     return cards

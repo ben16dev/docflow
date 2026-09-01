@@ -28,10 +28,10 @@ No sustituye los tests automatizados (`pytest`); los complementa.
 
 ## 3. Regresión funcional antes de build
 
-- [ ] MBOX: flujo principal de una herramienta
-- [ ] EML: flujo principal de una herramienta
+- [ ] MBOX: flujo principal de una herramienta (desde pestaña CONVERSIÓN)
+- [ ] EML: flujo principal de una herramienta (desde pestaña CONVERSIÓN)
 - [ ] PDF: flujo principal de una herramienta
-- [ ] Archivos: herramienta de la pestaña Archivos
+- [ ] RENOMBRADO: herramienta de la pestaña RENOMBRADO
 - [ ] Conversión: flujo principal
 - [ ] Progreso visible durante una ejecución
 - [ ] Cancelación: botón Cancelar → estado «Cancelado», UI recuperada (sin diálogo de error)

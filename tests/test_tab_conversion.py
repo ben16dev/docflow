@@ -81,11 +81,16 @@ def test_conversion_one_card_per_registered_tool_in_order(root):
     assert all(isinstance(c, ToolCard) for c in cards)
 
 
-def test_ocr_card_visible_in_conversion(root):
+def test_all_five_tools_visible_in_conversion(root):
+    """Las 5 herramientas (2 PDF + 3 correo) están presentes."""
     tab, _ = _build_conversion_tab(root)
     cards = _cards_by_title(tab)
     assert "PDF escaneado a PDF OCR" in cards
     assert "Imagen a PDF" in cards
+    assert "MBOX a EML" in cards
+    assert "Extraer adjuntos de MBOX" in cards
+    assert "EML a PDF" in cards
+    assert len(cards) == 5
 
 
 def test_ocr_card_uses_herramienta_flow(root):
@@ -112,6 +117,32 @@ def test_img_a_pdf_keeps_ejecutar_flow(root):
     assert flow == "ejecutar"
     assert funcion is img_a_pdf.run
     assert action == "Imagen a PDF"
+
+
+def test_mbox_tools_use_ejecutar_flow(root):
+    """Herramientas MBOX usan flujo _ejecutar (requieren carpeta de trabajo)."""
+    tab, calls = _build_conversion_tab(root)
+    cards = _cards_by_title(tab)
+
+    cards["MBOX a EML"].invoke()
+
+    assert len(calls) == 1
+    flow, funcion, action = calls[0]
+    assert flow == "ejecutar"
+    assert action == "MBOX a EML"
+
+
+def test_eml_tool_uses_ejecutar_flow(root):
+    """Herramienta EML usa flujo _ejecutar (requiere carpeta de trabajo)."""
+    tab, calls = _build_conversion_tab(root)
+    cards = _cards_by_title(tab)
+
+    cards["EML a PDF"].invoke()
+
+    assert len(calls) == 1
+    flow, funcion, action = calls[0]
+    assert flow == "ejecutar"
+    assert action == "EML a PDF"
 
 
 def test_ocr_listed_as_self_contained():

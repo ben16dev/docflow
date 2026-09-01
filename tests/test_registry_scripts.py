@@ -11,15 +11,23 @@ def test_dni_tool_not_registered():
     }
 
 
-def test_eml_tool_still_registered():
-    eml_scripts = get_scripts("EML")
-    assert "EML a PDF" in eml_scripts
+def test_mbox_and_eml_categories_empty():
+    """Las categorías MBOX y EML ya no existen en el registro."""
+    assert get_scripts("MBOX") == {}
+    assert get_scripts("EML") == {}
 
 
-def test_mbox_tools_still_registered():
-    mbox_scripts = get_scripts("MBOX")
-    assert "Extraer adjuntos de MBOX" in mbox_scripts
-    assert "MBOX a EML" in mbox_scripts
+def test_mbox_tools_in_conversion():
+    """Herramientas MBOX ahora registradas en CONVERSIÓN."""
+    conversion_scripts = get_scripts("CONVERSIÓN")
+    assert "Extraer adjuntos de MBOX" in conversion_scripts
+    assert "MBOX a EML" in conversion_scripts
+
+
+def test_eml_tool_in_conversion():
+    """Herramienta EML ahora registrada en CONVERSIÓN."""
+    conversion_scripts = get_scripts("CONVERSIÓN")
+    assert "EML a PDF" in conversion_scripts
 
 
 def test_imagen_a_pdf_moved_to_conversion():
@@ -38,6 +46,25 @@ def test_ocr_pdf_registered_in_conversion():
 
 def test_conversion_category_is_valid():
     assert "CONVERSIÓN" in VALID_CATEGORIES
+
+
+def test_mbox_and_eml_not_valid_categories():
+    """MBOX y EML ya no son categorías válidas."""
+    assert "MBOX" not in VALID_CATEGORIES
+    assert "EML" not in VALID_CATEGORIES
+
+
+def test_conversion_has_five_tools():
+    """CONVERSIÓN contiene exactamente 5 herramientas."""
+    conversion_scripts = get_scripts("CONVERSIÓN")
+    assert len(conversion_scripts) == 5
+
+
+def test_no_duplicate_tools_in_conversion():
+    """No hay herramientas duplicadas en CONVERSIÓN."""
+    conversion_scripts = get_scripts("CONVERSIÓN")
+    names = list(conversion_scripts.keys())
+    assert len(names) == len(set(names))
 
 
 def test_img_a_pdf_metadata_category():

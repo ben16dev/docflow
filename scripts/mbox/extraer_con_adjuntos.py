@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 SCRIPT_META = {
     "name": "Extraer adjuntos de MBOX",
-    "category": "MBOX"
+    "category": "CONVERSIÓN"
 }
 
 import mailbox

@@ -1,6 +1,6 @@
 SCRIPT_META = {
     "name": "EML a PDF",
-    "category": "EML"
+    "category": "CONVERSIÓN"
 }
  
 import re

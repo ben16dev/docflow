@@ -17,8 +17,6 @@ from version import (
     APP_AUTHOR,
 )
 
-from ui.tabs.tab_mbox import build_tab as build_tab_mbox
-from ui.tabs.tab_eml import build_tab as build_tab_eml
 from ui.tabs.tab_pdf import build_tab as build_tab_pdf
 from ui.tabs.tab_archivos import build_tab as build_tab_archivos
 from ui.tabs.tab_conversion import build_tab as build_tab_conversion
@@ -242,47 +240,27 @@ class App(tk.Tk):
         )
         self.notebook.pack(fill="both", expand=True)
 
-        self.tab_mbox = ttk.Frame(self.notebook)
-        self.tab_eml = ttk.Frame(self.notebook)
         self.tab_pdf = ttk.Frame(self.notebook)
         self.tab_archivos = ttk.Frame(self.notebook)
         self.tab_conversion = ttk.Frame(self.notebook)
 
         try:
-            self.icon_mbox = self._load_icon(resource_path("ui/icons/mbox.png"), (16, 16))
-            self.icon_eml = self._load_icon(resource_path("ui/icons/eml.png"), (16, 16))
             self.icon_pdf = self._load_icon(resource_path("ui/icons/pdf.png"), (16, 16))
 
-            self.notebook.add(
-                self.tab_mbox,
-                text="MBOX",
-                image=self.icon_mbox,
-                compound="left"
-            )
-            self.notebook.add(
-                self.tab_eml,
-                text="EML",
-                image=self.icon_eml,
-                compound="left"
-            )
             self.notebook.add(
                 self.tab_pdf,
                 text="PDF",
                 image=self.icon_pdf,
                 compound="left"
             )
-            self.notebook.add(self.tab_archivos, text="Archivos")
-            self.notebook.add(self.tab_conversion, text="Conversión")
+            self.notebook.add(self.tab_archivos, text="RENOMBRADO")
+            self.notebook.add(self.tab_conversion, text="CONVERSIÓN")
 
         except Exception:
-            self.notebook.add(self.tab_mbox, text="MBOX")
-            self.notebook.add(self.tab_eml, text="EML")
             self.notebook.add(self.tab_pdf, text="PDF")
-            self.notebook.add(self.tab_archivos, text="Archivos")
-            self.notebook.add(self.tab_conversion, text="Conversión")
+            self.notebook.add(self.tab_archivos, text="RENOMBRADO")
+            self.notebook.add(self.tab_conversion, text="CONVERSIÓN")
 
-        build_tab_mbox(self.tab_mbox, self)
-        build_tab_eml(self.tab_eml, self)
         build_tab_pdf(self.tab_pdf, self)
         build_tab_archivos(self.tab_archivos, self)
         build_tab_conversion(self.tab_conversion, self)
