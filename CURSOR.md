@@ -14,6 +14,8 @@ Antes de responder o implementar cualquier cambio, leer siempre:
 
 1. CURSOR.md
 2. ARCHITECTURE.md
+3. ROADMAP.md
+4. DECISIONS.md
 
 No asumir arquitectura ni comportamiento sin revisar estos documentos.
 
