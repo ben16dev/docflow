@@ -4,11 +4,9 @@ SCRIPT_META = {
 }
 
 import os
-import re
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from pathlib import Path
-from decimal import Decimal, ROUND_HALF_UP
 
 from config import get_ruta
 from ui.exceptions import CancelledByUser
@@ -16,79 +14,16 @@ from ui.ui_thread import call_ui
 from ui.window_icon import set_window_icon
 from logger import logger
 
-from scripts.common.filenames import resolve_conflict
 from scripts.common.pdf_ranges import parse_ranges, ranges_to_pages_set
-from scripts.common.results import build_result, build_cancelled_result
-
-try:
-    import fitz  # pymupdf
-except Exception:
-    fitz = None
-
-
-# ======================================================
-# UTILIDADES IMPORTES
-# ======================================================
-
-def _extraer_texto_pdf(path: Path) -> str:
-    if fitz is None:
-        raise RuntimeError("Falta dependencia 'pymupdf'.")
-
-    doc = fitz.open(str(path))
-    texto = ""
-
-    try:
-        for page in doc:
-            texto += page.get_text()
-    finally:
-        doc.close()
-
-    return texto
-
-
-def _parse_euro(valor_str: str) -> Decimal:
-    limpio = valor_str.replace("€", "").strip()
-    limpio = limpio.replace(".", "").replace(",", ".")
-    return Decimal(limpio)
-
-
-def _format_euro(valor: Decimal) -> str:
-    valor = valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    s = f"{valor:,.2f}"
-    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"{s} €"
-
-
-def _extraer_importe_base(texto: str):
-    match = re.search(
-        r"Siendo\s+([\d\.,]+\s?€)\s+lo pagado",
-        texto,
-        re.IGNORECASE
-    )
-    return match.group(1) if match else None
-
-
-def _detectar_importes_auto(texto: str):
-    base_str = _extraer_importe_base(texto)
-
-    if not base_str:
-        return []
-
-    try:
-        base = _parse_euro(base_str)
-    except Exception:
-        return []
-
-    imp_15 = _format_euro(base * Decimal("0.15"))
-    imp_85 = _format_euro(base * Decimal("0.85"))
-
-    encontrados = []
-
-    for imp in [imp_15, imp_85]:
-        if imp in texto:
-            encontrados.append(imp)
-
-    return encontrados
+from scripts.common.results import build_result
+from scripts.pdf.censura_core import (
+    MotivoCensura,
+    ResultadoCensura,
+    ResumenLote,
+    censurar_pdf,
+    contar_paginas,
+    validar_terminos,
+)
 
 
 # ======================================================
@@ -102,13 +37,14 @@ class CensurarDialog(tk.Toplevel):
         set_window_icon(self)
 
         self.title("Censurar información en PDF")
-        self.geometry("680x500")
+        self.geometry("680x560")
         self.resizable(False, False)
 
         self.resultado = None
 
         self.var_todas = tk.BooleanVar(value=True)
         self.var_rango = tk.StringVar(value="1")
+        self.var_importes = tk.BooleanVar(value=True)
 
         tk.Label(
             self,
@@ -118,6 +54,12 @@ class CensurarDialog(tk.Toplevel):
 
         self.txt_words = tk.Text(self, height=8)
         self.txt_words.pack(fill="both", padx=12, pady=(0, 8))
+
+        tk.Checkbutton(
+            self,
+            text="Detectar importes del 15 % y 85 % (caso 'Siendo X € lo pagado')",
+            variable=self.var_importes
+        ).pack(anchor="w", padx=12, pady=(0, 4))
 
         frame_pages = tk.LabelFrame(self, text="Páginas")
         frame_pages.pack(fill="x", padx=12, pady=8)
@@ -175,6 +117,13 @@ class CensurarDialog(tk.Toplevel):
     def _confirmar(self):
         words_raw = self.txt_words.get("1.0", "end")
         words = [w.strip() for w in words_raw.splitlines() if w.strip()]
+        importes = bool(self.var_importes.get())
+
+        try:
+            words = validar_terminos(words, importes)
+        except ValueError as e:
+            messagebox.showerror("Faltan términos", str(e), parent=self)
+            return
 
         if self.var_todas.get():
             ranges = None
@@ -189,6 +138,7 @@ class CensurarDialog(tk.Toplevel):
             "words": words,
             "all_pages": self.var_todas.get(),
             "ranges": ranges,
+            "detectar_importes": importes,
         }
 
         self.destroy()
@@ -199,54 +149,112 @@ class CensurarDialog(tk.Toplevel):
 
 
 # ======================================================
-# LÓGICA PDF
+# LOTE (sin diálogos: testable)
 # ======================================================
 
-def _censurar_pdf(
-    input_path: Path,
-    output_path: Path,
-    words,
-    pages_to_process,
-    is_cancelled=None
-):
+class CensuraLoteCancelada(CancelledByUser):
+    """Cancelación que conserva el resultado parcial (ScriptRunner lo entrega a on_cancelled)."""
 
-    if fitz is None:
-        raise RuntimeError("Falta dependencia 'pymupdf'.")
+    def __init__(self, result: dict):
+        self.result = result
+        super().__init__("Cancelado")
 
-    texto = _extraer_texto_pdf(input_path)
-    auto_words = _detectar_importes_auto(texto)
 
-    if auto_words:
-        logger.info(f"[PDF-CENSURA] Importes detectados: {auto_words}")
+def _resultado_lote(resumen: ResumenLote, salida_dir: Path, *, cancelado: bool = False) -> dict:
+    pendientes = max(
+        resumen.total - resumen.procesados - resumen.omitidos - resumen.errores, 0
+    )
 
-    palabras_finales = list(set(words + auto_words))
+    extra = {f"errores_{m.value}": n for m, n in resumen.errores_por_motivo.items()}
 
-    doc = fitz.open(str(input_path))
+    # Si no se creó la carpeta de salida (nada procesado), se apunta a la de origen.
+    output_dir = salida_dir if salida_dir.is_dir() else salida_dir.parent
+
+    return build_result(
+        message="Cancelado" if cancelado else resumen.mensaje(),
+        output_dir=output_dir,
+        total=resumen.total,
+        procesados=resumen.procesados,
+        errores=resumen.errores,
+        omitidos=resumen.omitidos + (pendientes if cancelado else 0),
+        files=resumen.archivos_existentes(),
+        terminos_sin_coincidencias=resumen.terminos_sin_coincidencias,
+        paginas_con_imagenes=resumen.paginas_con_imagenes,
+        paginas_solo_vectoriales=resumen.paginas_solo_vectoriales,
+        **extra,
+    )
+
+
+def _procesar_un_pdf(pdf_path, salida_dir, cfg, is_cancelled) -> ResultadoCensura:
+    """Resuelve el rango de páginas y delega en el núcleo."""
+    try:
+        if cfg["all_pages"]:
+            pages = None
+        else:
+            pages = ranges_to_pages_set(cfg["ranges"], contar_paginas(pdf_path))
+    except ValueError:
+        return ResultadoCensura.fallo(MotivoCensura.RANGO_INVALIDO)
+    except Exception:
+        return ResultadoCensura.fallo(MotivoCensura.PDF_NO_ABRE)
+
+    return censurar_pdf(
+        pdf_path,
+        salida_dir,
+        cfg["words"],
+        pages,
+        detectar_importes=cfg.get("detectar_importes", True),
+        is_cancelled=is_cancelled,
+    )
+
+
+def _ejecutar_lote(pdf_paths, cfg, progress=None, is_cancelled=None) -> dict:
+    # Defensa en profundidad: lista vacía solo con la casilla de importes activa.
+    validar_terminos(cfg["words"], cfg.get("detectar_importes", True))
+
+    pdf_paths = [Path(p) for p in pdf_paths]
+    salida_dir = pdf_paths[0].parent / "PDF_censurados"
+    total = len(pdf_paths)
+    resumen = ResumenLote(total=total)
+
+    # Nunca se registran términos, texto, nombres de archivo ni rutas.
+    logger.info(f"[PDF-CENSURA] Procesando {total} PDF(s)")
 
     try:
-        for page_index in range(doc.page_count):
+        for idx, pdf_path in enumerate(pdf_paths, start=1):
 
             if is_cancelled and is_cancelled():
                 raise CancelledByUser()
 
-            page_num = page_index + 1
-            if page_num not in pages_to_process:
-                continue
+            resultado = _procesar_un_pdf(pdf_path, salida_dir, cfg, is_cancelled)
+            resumen.agregar(resultado)
 
-            page = doc.load_page(page_index)
+            logger.info(
+                f"[PDF-CENSURA] archivo {idx} de {total}: "
+                f"estado={resultado.estado.value} motivo={resultado.motivo.value} "
+                f"coincidencias={resultado.coincidencias} "
+                f"paginas_afectadas={resultado.paginas_afectadas} "
+                f"terminos_sin_coincidencias={resultado.terminos_sin_coincidencias} "
+                f"paginas_con_imagenes={resultado.paginas_con_imagenes} "
+                f"paginas_solo_vectoriales={resultado.paginas_solo_vectoriales}"
+            )
 
-            for term in palabras_finales:
-                rects = page.search_for(term)
-                for r in rects:
-                    page.add_redact_annot(r, fill=(0, 0, 0))
+            if progress:
+                progress(idx, total)
 
-            page.apply_redactions()
+    except CancelledByUser:
+        logger.info(
+            f"[PDF-CENSURA] Cancelado por usuario. "
+            f"Procesados: {resumen.procesados}. Omitidos: {resumen.omitidos}. "
+            f"Errores: {resumen.errores}"
+        )
+        raise CensuraLoteCancelada(_resultado_lote(resumen, salida_dir, cancelado=True))
 
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        doc.save(str(output_path), garbage=4, deflate=True)
+    logger.info(
+        f"[PDF-CENSURA] Finalizado. Procesados: {resumen.procesados}. "
+        f"Omitidos: {resumen.omitidos}. Errores: {resumen.errores}"
+    )
 
-    finally:
-        doc.close()
+    return _resultado_lote(resumen, salida_dir)
 
 
 # ======================================================
@@ -281,77 +289,4 @@ def run(progress=None, is_cancelled=None):
     if not cfg:
         raise CancelledByUser()
 
-    words = cfg["words"]
-
-    salida_dir = pdf_paths[0].parent / "PDF_censurados"
-    salida_dir.mkdir(exist_ok=True)
-
-    total = len(pdf_paths)
-    procesados = 0
-    errores = 0
-
-    logger.info(f"[PDF-CENSURA] Procesando {total} PDF(s)")
-
-    try:
-
-        for idx, pdf_path in enumerate(pdf_paths, start=1):
-
-            if is_cancelled and is_cancelled():
-                raise CancelledByUser()
-
-            try:
-                doc = fitz.open(str(pdf_path))
-                try:
-                    max_pages = doc.page_count
-                finally:
-                    doc.close()
-
-                if cfg["all_pages"]:
-                    pages = set(range(1, max_pages + 1))
-                else:
-                    pages = ranges_to_pages_set(cfg["ranges"], max_pages)
-
-                out_path = resolve_conflict(
-                    salida_dir / f"{pdf_path.stem}_censurado.pdf",
-                    pattern="_{i:02d}"
-                )
-
-                _censurar_pdf(pdf_path, out_path, words, pages, is_cancelled)
-
-                procesados += 1
-
-            except CancelledByUser:
-                raise
-
-            except Exception as e:
-                errores += 1
-                logger.error(f"[PDF-CENSURA] Error en {pdf_path.name}: {e}")
-
-            if progress:
-                progress(idx, total)
-
-    except CancelledByUser:
-        logger.info("[PDF-CENSURA] Cancelado por usuario")
-        return build_cancelled_result(
-            output_dir=salida_dir,
-            total=total,
-            procesados=procesados,
-            errores=errores,
-        )
-
-    logger.info(
-        f"[PDF-CENSURA] Finalizado. "
-        f"Procesados: {procesados}. "
-        f"Errores: {errores}. "
-        f"Omitidos: {total - procesados - errores}"
-    )
-
-    return build_result(
-        message=f"{procesados} PDF(s) censurado(s)",
-        output_dir=salida_dir,
-        total=total,
-        procesados=procesados,
-        errores=errores,
-    )
-
-
+    return _ejecutar_lote(pdf_paths, cfg, progress, is_cancelled)
