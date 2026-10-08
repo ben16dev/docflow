@@ -580,7 +580,10 @@ def _aplicar_scrub(doc) -> None:
         javascript=True,
         # URLs y mailto de los enlaces pueden contener datos del cliente.
         remove_links=True,
-        reset_fields=True,
+        # False: si ningún campo contiene un término, sus valores deben conservarse.
+        # verificar_salida ya revisa nombre, valor, etiqueta y opciones de cada campo;
+        # los campos con término se aplanan con bake antes de redactar.
+        reset_fields=False,
         # False por un bug de PyMuPDF 1.25.1: delete_responses lanza AttributeError
         # con cualquier anotación. Las respuestas con término ya se eliminan en
         # _sanear_anotaciones y la verificación final revisa las anotaciones restantes.
@@ -993,10 +996,17 @@ class ResumenLote:
             partes.append(f"{frase}{nombres}.")
 
         if self.total == 1 and self.terminos_sin_coincidencias > 0:
-            partes.append(
-                f"{self.terminos_sin_coincidencias} de las {self.terminos_buscados} "
-                "palabras no se encontraron."
-            )
+            if self.terminos_buscados == 1:
+                partes.append("La palabra no se encontró.")
+            elif self.terminos_sin_coincidencias == 1:
+                partes.append(
+                    f"1 de las {self.terminos_buscados} palabras no se encontró."
+                )
+            else:
+                partes.append(
+                    f"{self.terminos_sin_coincidencias} de las {self.terminos_buscados} "
+                    "palabras no se encontraron."
+                )
 
         if self.paginas_con_imagenes:
             partes.append(

@@ -706,9 +706,21 @@ def test_aplanar_formularios_conserva_anotaciones_y_enlaces(tmp_path):
         doc.close()
 
 
+def _valores_widgets(path: Path) -> dict:
+    doc = fitz.open(str(path))
+    try:
+        return {
+            w.field_name: w.field_value
+            for w in doc[0].widgets()
+        }
+    finally:
+        doc.close()
+
+
 def test_formulario_sin_termino_en_campos_se_conserva(tmp_path, monkeypatch):
     pdf = _crear_formulario(tmp_path / "form.pdf", termino_en_campos=False)
     dest = tmp_path / "out"
+    valores_originales = _valores_widgets(pdf)
 
     def no_debe_llamarse(doc):
         raise AssertionError("bake no debe ejecutarse si ningún campo contiene un término")
@@ -722,6 +734,7 @@ def test_formulario_sin_termino_en_campos_se_conserva(tmp_path, monkeypatch):
     try:
         assert out.is_form_pdf
         assert [w.field_name for w in out[0].widgets()] == ["texto_1", "combo_1", "casilla_1"]
+        assert _valores_widgets(r.output_path) == valores_originales
         assert out[0].search_for(TERMINO) == []
     finally:
         out.close()
@@ -984,19 +997,42 @@ def test_mensaje_exito():
     )
 
 
-def test_mensaje_exito_con_palabras_sin_coincidencias_solo_si_es_un_pdf():
-    uno = ResumenLote(total=1)
-    uno.agregar(_ok(coincidencias=1, paginas_afectadas=1, terminos_buscados=3,
-                    terminos_sin_coincidencias=2), "a.pdf")
-    assert uno.mensaje() == (
+def test_mensaje_una_sola_palabra_sin_coincidencias():
+    resumen = ResumenLote(total=1)
+    resumen.agregar(_omitido(terminos_buscados=1, terminos_sin_coincidencias=1), "vacio.pdf")
+    assert resumen.mensaje() == (
+        "No se ha creado ningún archivo. "
+        "1 PDF(s) sin coincidencias; no se ha creado archivo (vacio.pdf). "
+        "La palabra no se encontró."
+    )
+
+
+def test_mensaje_una_de_varias_palabras_sin_coincidencias():
+    resumen = ResumenLote(total=1)
+    resumen.agregar(_ok(coincidencias=1, paginas_afectadas=1, terminos_buscados=3,
+                        terminos_sin_coincidencias=1), "a.pdf")
+    assert resumen.mensaje() == (
+        "Censura completada en 1 de 1 PDF(s): 1 coincidencia(s) tachada(s) en 1 página(s). "
+        "1 de las 3 palabras no se encontró."
+    )
+
+
+def test_mensaje_varias_palabras_sin_coincidencias():
+    resumen = ResumenLote(total=1)
+    resumen.agregar(_ok(coincidencias=1, paginas_afectadas=1, terminos_buscados=3,
+                        terminos_sin_coincidencias=2), "a.pdf")
+    assert resumen.mensaje() == (
         "Censura completada en 1 de 1 PDF(s): 1 coincidencia(s) tachada(s) en 1 página(s). "
         "2 de las 3 palabras no se encontraron."
     )
 
+
+def test_mensaje_palabras_sin_coincidencias_solo_si_es_un_pdf():
     varios = ResumenLote(total=2)
     varios.agregar(_ok(coincidencias=1, paginas_afectadas=1, terminos_buscados=3,
                        terminos_sin_coincidencias=2), "a.pdf")
     varios.agregar(_ok(coincidencias=1, paginas_afectadas=1, terminos_buscados=3), "b.pdf")
+    assert "no se encontró" not in varios.mensaje()
     assert "no se encontraron" not in varios.mensaje()
 
 
