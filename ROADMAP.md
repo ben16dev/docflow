@@ -346,7 +346,7 @@ Estado: Cerrada en desarrollo y validada en macOS.
 * MBOX y EML no aparecen como pestañas.
 * Las cinco herramientas de CONVERSIÓN están disponibles.
 * Herramientas MBOX/EML probadas manualmente.
-* Suite actual: 395 tests superados y 1 omitido.
+* Suite actual: 528 passed, 1 skipped.
 * Validación visual realizada en macOS.
 
 #### Pendiente multiplataforma
@@ -448,9 +448,14 @@ Estado: Parcialmente implementada.
 * Promoción atómica.
 * Eliminación controlada del flag UF_HIDDEN en macOS.
 * Conservación de otros flags y atributos extendidos.
+* Censura fail-closed con verificación del resultado.
+* Limpieza de metadatos en censura.
 
 ### Pendiente
 
+* EML→PDF: HTML no confiable (bloqueo de red y JS, timeout, cancelación).
+* Censura: texto dentro de imágenes (OCR por página y censura encadenada).
+* Censura: importes con variantes de formato (1000,00 / 1.000,00).
 * Confirmación antes de modificar originales.
 * Normalización común de entradas.
 * Gestión completamente centralizada de colisiones.
@@ -467,7 +472,7 @@ Estado: En progreso.
 
 ### Implementado
 
-* Suite general con 395 tests superados y 1 omitido.
+* Suite general con 528 passed, 1 skipped.
 * Tests del núcleo OCR.
 * Tests de integración OCR.
 * Tests de selección múltiple.
@@ -631,6 +636,8 @@ Largo plazo.
 
 Estado de ubicación: pendiente de decisión de producto.
 
+La censura por palabras ya está disponible (Sprint 9). La anonimización por categorías (DNI, IBAN, teléfonos, direcciones, correos) se apoyaría en el mismo núcleo (`censura_core`) y en su verificación fail-closed.
+
 #### Posibles ubicaciones
 
 * Nueva pestaña específica si incorpora revisión visual, reglas y múltiples herramientas.
@@ -662,19 +669,20 @@ Largo plazo.
 
 ### Alta
 
-1. Validación y empaquetado OCR en Windows.
-2. PDF → Markdown.
-3. Drag & Drop.
+1. Sprint 10 — EML→PDF seguro.
+2. Sprint 11 — OCR en Windows.
 
 ### Media
 
-1. Añadir iconos a RENOMBRADO y CONVERSIÓN.
-2. Agrupar y unir PDFs por patrón.
-3. Mejoras del renombrado.
-4. Componentes reutilizables.
-5. Extracción inteligente de datos.
-6. Auditoría de licencias y dependencias.
-7. Firma y notarización de macOS.
+1. PDF → Markdown.
+2. Drag & Drop.
+3. Añadir iconos a RENOMBRADO y CONVERSIÓN.
+4. Agrupar y unir PDFs por patrón.
+5. Mejoras del renombrado.
+6. Componentes reutilizables.
+7. Extracción inteligente de datos.
+8. Auditoría de licencias y dependencias.
+9. Firma y notarización de macOS.
 
 ### Baja
 
@@ -745,7 +753,7 @@ Estado: Cerrado en desarrollo y validado en macOS.
 * Tests de presencia de las herramientas migradas.
 * Tests de unicidad del registro.
 * Tests de executor correcto.
-* Suite completa: 395 passed, 1 skipped.
+* Suite completa: 528 passed, 1 skipped.
 * Imports validados.
 * Ausencia de referencias UI obsoletas verificada.
 * Arranque correcto.
@@ -776,8 +784,27 @@ sin pérdida funcional, con las herramientas MBOX y EML integradas en CONVERSIÓ
 * Validación de la nueva navegación en Windows.
 * Añadir iconos a RENOMBRADO y CONVERSIÓN.
 
+## SPRINT 9 — CENSURA FAIL-CLOSED ✅
+
+Estado: Cerrado en desarrollo y validado en macOS.
+
+* Núcleo `scripts/pdf/censura_core.py` (sin Tkinter); el script queda como diálogo, `run` y `build_result`.
+* Estados por PDF: procesado / omitido (sin coincidencias, sin archivo) / error (sin archivo).
+* Página seleccionada sin texto y con imágenes: error «imágenes escaneadas sin texto» (aplicar OCR antes).
+* Verificación del resultado reabriendo un temporal antes de promoverlo con `os.replace`: texto de página (`search_for` y `get_text` normalizado NFKC/casefold/guiones), metadatos Info/XMP, adjuntos, outline, anotaciones, campos de formulario (nombre, valor, etiqueta y opciones), enlaces y destinos con nombre.
+* Saneado de outline y anotaciones; `scrub` con parámetros explícitos.
+* Campos de formulario: si algún campo de las páginas seleccionadas contiene un término, se aplanan los campos del documento (`bake`) y se tacha el valor como texto de página; si no, el formulario se conserva con sus valores.
+* Revalidación final del lote: un procesado sin archivo físico pasa a error.
+* Regla «Siendo X € lo pagado» (15 %/85 %) como casilla visible, activada por defecto; importe ilegible = error.
+* Mensajes en lenguaje llano con recuento de coincidencias y páginas, causas de error traducidas y nombres de PDFs fallidos (solo en el mensaje visible; los logs no contienen términos, nombres ni rutas).
+* Tests: suite 528 passed, 1 skipped.
+* Límites conocidos: no se censura texto dentro de imágenes (el resumen avisa del nº de páginas con imágenes); texto convertido en trazados vectoriales solo avisa; texto oculto sin término no se garantiza eliminado; los enlaces se eliminan, también los internos; el aplanado de formularios afecta a todo el documento; un término presente solo en el nombre u opciones de un campo y no en texto visible produce «omitido».
+
 ## SIGUIENTE SPRINT RECOMENDADO
 
-### SPRINT 9 — OCR EN WINDOWS
+1. **Sprint 10 — EML→PDF seguro** (HTML no confiable, bloqueo de red y JS, timeout, cancelación).
+2. **Sprint 11 — OCR en Windows** (antes planificado como Sprint 9).
+3. **Sprint 12 — Separación UI/lógica en herramientas pesadas** (extraer, rotar, optimizar, unir, limpiar numeración, renombrar PDFs por índice; no `ocr_pdf` ni MBOX).
+4. **Sprint 13+** — release gate (auditoría de licencias, incluida PyMuPDF AGPL frente a la licencia propietaria; firma y notarización), componentes comunes, Drag & Drop, PDF→Markdown, iconos.
 
-Lo mantendría como siguiente sprint porque es actualmente el mayor bloqueo técnico para que DocFlow pueda avanzar hacia una distribución verdaderamente multiplataforma. Los iconos de RENOMBRADO y CONVERSIÓN los trataría como un ajuste UX pequeño, posiblemente antes o después del Sprint 9, pero no retrasaría Windows por ellos.
+Los fallos de privacidad se corrigen antes de ampliar la distribución.
