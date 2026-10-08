@@ -90,6 +90,51 @@ def _crear_pdf_solo_imagen(path: Path, texto=f"cliente {TERMINO}"):
     return path
 
 
+def _crear_formulario(path: Path, *, termino_en_campos=True, lineas_extra=(),
+                      solo_en_opciones=False):
+    """
+    PDF con texto de página que contiene el término, un campo de texto, un combo,
+    una casilla, una anotación Highlight y un enlace URI.
+
+    termino_en_campos: valor del texto, valor+opciones del combo y nombre de la casilla.
+    solo_en_opciones: el término solo está en la lista de opciones del combo.
+    """
+    doc = fitz.open()
+    page = doc.new_page()
+    _escribir(page, [f"Cliente {TERMINO}", *lineas_extra], y0=60)
+
+    en_campos = termino_en_campos and not solo_en_opciones
+    texto = f"Valor {TERMINO}" if en_campos else "Valor neutro"
+    opcion = f"Opcion {TERMINO}" if en_campos else "Opcion neutra"
+    opciones = [opcion, "otra"]
+    if solo_en_opciones:
+        opciones = ["Opcion neutra", f"Opcion {TERMINO}"]
+    casilla = f"casilla_{TERMINO}" if en_campos else "casilla_1"
+
+    for nombre, tipo, valor, y, opts in (
+        ("texto_1", fitz.PDF_WIDGET_TYPE_TEXT, texto, 200, None),
+        ("combo_1", fitz.PDF_WIDGET_TYPE_COMBOBOX, opcion, 250, opciones),
+        (casilla, fitz.PDF_WIDGET_TYPE_CHECKBOX, True, 300, None),
+    ):
+        w = fitz.Widget()
+        w.field_name = nombre
+        w.field_type = tipo
+        w.field_value = valor
+        if opts:
+            w.choice_values = opts
+        w.rect = (fitz.Rect(72, y, 300, y + 25) if tipo != fitz.PDF_WIDGET_TYPE_CHECKBOX
+                  else fitz.Rect(72, y, 92, y + 20))
+        page.add_widget(w)
+
+    resaltado = page.add_highlight_annot(fitz.Rect(72, 40, 200, 58))
+    resaltado.update()
+    page.insert_link({"kind": fitz.LINK_URI, "from": fitz.Rect(72, 400, 200, 420),
+                      "uri": "https://example.com/ok"})
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
 def _sha(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -118,6 +163,37 @@ def log_docflow(caplog):
     caplog.set_level(logging.DEBUG, logger="DocFlow")
     yield caplog
     base.removeHandler(caplog.handler)
+
+
+class _CapturaLog(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.mensajes = []
+
+    def emit(self, record):
+        self.mensajes.append(record.getMessage())
+
+
+@pytest.fixture(autouse=True)
+def _logs_sin_terminos_nombres_ni_rutas(tmp_path):
+    """
+    En TODOS los tests: nada de lo que se registre en el log de DocFlow puede
+    contener términos, nombres de archivo ni rutas (política de logs).
+    """
+    base = logging.getLogger("DocFlow")
+    captura = _CapturaLog()
+    nivel_previo = base.level
+    base.addHandler(captura)
+    base.setLevel(logging.DEBUG)
+    try:
+        yield
+    finally:
+        base.removeHandler(captura)
+        base.setLevel(nivel_previo)
+
+    registro = "\n".join(captura.mensajes)
+    for prohibido in (TERMINO, TERMINO.lower(), "Cliente", str(tmp_path), ".pdf"):
+        assert prohibido not in registro, f"El log contiene datos prohibidos: {prohibido!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +286,9 @@ def test_pdf_con_importes_automaticos_se_censura(tmp_path):
     )
     r = censurar_pdf(pdf, tmp_path / "out", [], detectar_importes=True)
     assert r.estado == EstadoCensura.PROCESADO
+    assert r.importes_autodetectados == 2  # el 15 % y el 85 %
+    assert r.terminos_buscados == 2
+    assert r.coincidencias == 2
     texto = _texto_pdf(r.output_path)
     assert "150,00" not in texto and "850,00" not in texto
     assert "999,99" in texto  # lo que no es 15 %/85 % se conserva
@@ -410,6 +489,19 @@ def test_terminos_sin_coincidencias_se_cuentan_en_procesado(tmp_path):
     r = censurar_pdf(pdf, tmp_path / "out", [TERMINO, "nadie", "ninguno"], detectar_importes=False)
     assert r.estado == EstadoCensura.PROCESADO
     assert r.terminos_sin_coincidencias == 2
+    assert r.terminos_buscados == 3
+    assert r.importes_autodetectados == 0
+    assert r.formularios_aplanados is False
+
+
+def test_importe_que_coincide_con_un_termino_del_usuario_no_cuenta_dos_veces(tmp_path):
+    pdf = _crear_pdf(
+        tmp_path / "a.pdf", ["Siendo 1.000,00 € lo pagado\nHonorarios 150,00 €\nResto 850,00 €"]
+    )
+    r = censurar_pdf(pdf, tmp_path / "out", ["150,00 €"], detectar_importes=True)
+    assert r.estado == EstadoCensura.PROCESADO
+    assert r.importes_autodetectados == 1  # solo el 85 % es nuevo
+    assert r.terminos_buscados == 2
 
 
 @pytest.mark.parametrize("pages", [{0}, {5}, set()])
@@ -567,26 +659,140 @@ def test_adjunto_embebido_y_anotacion_de_adjunto_se_eliminan(tmp_path):
     assert TERMINO.encode() not in r.output_path.read_bytes()
 
 
-def test_campo_de_formulario_con_termino_en_el_nombre_es_error(tmp_path):
-    doc = fitz.open()
-    page = doc.new_page()
-    _escribir(page, f"Cliente {TERMINO}")
-    w = fitz.Widget()
-    w.rect = fitz.Rect(50, 300, 250, 330)
-    w.field_name = f"campo_{TERMINO}"
-    w.field_type = fitz.PDF_WIDGET_TYPE_TEXT
-    w.field_value = "valor"
-    page.add_widget(w)
-    pdf = tmp_path / "form.pdf"
-    doc.save(str(pdf))
-    doc.close()
+# ---------------------------------------------------------------------------
+# Formularios (sprint 9.1): el contenido de los campos se censura
+# ---------------------------------------------------------------------------
 
+
+def test_formulario_con_termino_en_campos_se_aplana_y_se_censura(tmp_path):
+    pdf = _crear_formulario(tmp_path / "form.pdf")
     dest = tmp_path / "out"
+
+    r = censurar_pdf(pdf, dest, [TERMINO], detectar_importes=False)
+
+    assert r.estado == EstadoCensura.PROCESADO
+    assert r.motivo == MotivoCensura.OK
+    assert r.formularios_aplanados is True
+    assert r.coincidencias >= 3  # texto de página + campo de texto + combo
+    assert r.terminos_buscados == 1 and r.importes_autodetectados == 0
+
+    out = fitz.open(str(r.output_path))
+    try:
+        assert not out.is_form_pdf
+        for page in out:
+            assert page.search_for(TERMINO) == []
+            assert list(page.widgets()) == []
+            # Las anotaciones se conservan.
+            assert [a.type[0] for a in page.annots()] == [fitz.PDF_ANNOT_HIGHLIGHT]
+    finally:
+        out.close()
+    assert TERMINO.lower() not in normalizar_texto(_texto_pdf(r.output_path))
+    assert TERMINO.encode() not in r.output_path.read_bytes()
+    assert _sin_temporales(dest)
+
+
+def test_aplanar_formularios_conserva_anotaciones_y_enlaces(tmp_path):
+    """bake(annots=False, widgets=True): quita los campos y respeta anotaciones y enlaces."""
+    pdf = _crear_formulario(tmp_path / "form.pdf")
+    doc = fitz.open(str(pdf))
+    try:
+        assert len(list(doc[0].widgets())) == 3
+        core._aplanar_formularios(doc)
+        page = doc.load_page(0)  # tras el bake las páginas anteriores quedan invalidadas
+        assert list(page.widgets()) == []
+        assert [a.type[0] for a in page.annots()] == [fitz.PDF_ANNOT_HIGHLIGHT]
+        assert [link["uri"] for link in page.get_links()] == ["https://example.com/ok"]
+    finally:
+        doc.close()
+
+
+def test_formulario_sin_termino_en_campos_se_conserva(tmp_path, monkeypatch):
+    pdf = _crear_formulario(tmp_path / "form.pdf", termino_en_campos=False)
+    dest = tmp_path / "out"
+
+    def no_debe_llamarse(doc):
+        raise AssertionError("bake no debe ejecutarse si ningún campo contiene un término")
+
+    monkeypatch.setattr(core, "_aplanar_formularios", no_debe_llamarse)
+    r = censurar_pdf(pdf, dest, [TERMINO], detectar_importes=False)
+
+    assert r.estado == EstadoCensura.PROCESADO
+    assert r.formularios_aplanados is False
+    out = fitz.open(str(r.output_path))
+    try:
+        assert out.is_form_pdf
+        assert [w.field_name for w in out[0].widgets()] == ["texto_1", "combo_1", "casilla_1"]
+        assert out[0].search_for(TERMINO) == []
+    finally:
+        out.close()
+
+
+def test_termino_solo_en_las_opciones_de_un_combo_aplana_el_formulario(tmp_path):
+    pdf = _crear_formulario(tmp_path / "form.pdf", solo_en_opciones=True)
+    r = censurar_pdf(pdf, tmp_path / "out", [TERMINO], detectar_importes=False)
+
+    assert r.estado == EstadoCensura.PROCESADO
+    assert r.formularios_aplanados is True
+    out = fitz.open(str(r.output_path))
+    try:
+        assert list(out[0].widgets()) == []
+    finally:
+        out.close()
+
+
+def test_verificar_salida_revisa_las_opciones_de_los_combos(tmp_path):
+    pdf = _crear_formulario(tmp_path / "form.pdf", solo_en_opciones=True)
+    # La página contiene el término; se comprueba solo la categoría de formulario.
+    assert "campos_formulario" in core.verificar_salida(pdf, [TERMINO], [0], 1)
+
+    limpio = _crear_formulario(tmp_path / "limpio.pdf", termino_en_campos=False)
+    assert "campos_formulario" not in core.verificar_salida(limpio, [TERMINO], [0], 1)
+
+
+def test_bake_ineficaz_hace_que_la_verificacion_falle_y_no_deja_archivo(tmp_path, monkeypatch):
+    """Si el bake no limpiara los campos, la verificación final es la red de seguridad."""
+    pdf = _crear_formulario(tmp_path / "form.pdf")
+    dest = tmp_path / "out"
+    monkeypatch.setattr(core, "_aplanar_formularios", lambda doc: None)
+
     r = censurar_pdf(pdf, dest, [TERMINO], detectar_importes=False)
 
     assert r.estado == EstadoCensura.ERROR
     assert r.motivo == MotivoCensura.VERIFICACION_FALLIDA
     assert "campos_formulario" in r.fallos_verificacion
+    assert r.output_path is None
+    assert _archivos(dest) == []
+
+
+def test_verificacion_fallida_simulada_tras_el_bake_no_deja_archivo_ni_temporales(
+    tmp_path, monkeypatch
+):
+    pdf = _crear_formulario(tmp_path / "form.pdf")
+    dest = tmp_path / "out"
+    monkeypatch.setattr(core, "verificar_salida", lambda *a, **k: ["campos_formulario"])
+
+    r = censurar_pdf(pdf, dest, [TERMINO], detectar_importes=False)
+
+    assert r.estado == EstadoCensura.ERROR
+    assert r.motivo == MotivoCensura.VERIFICACION_FALLIDA
+    assert r.formularios_aplanados is True
+    assert r.fallos_verificacion == ("campos_formulario",)
+    assert _archivos(dest) == []
+    assert _sin_temporales(dest)
+
+
+def test_fallo_del_bake_es_error_interno_sin_archivo(tmp_path, monkeypatch):
+    pdf = _crear_formulario(tmp_path / "form.pdf")
+    dest = tmp_path / "out"
+
+    def explota(doc):
+        raise RuntimeError(f"bake roto con {TERMINO}")
+
+    monkeypatch.setattr(core, "_aplanar_formularios", explota)
+    r = censurar_pdf(pdf, dest, [TERMINO], detectar_importes=False)
+
+    assert r.estado == EstadoCensura.ERROR
+    assert r.motivo == MotivoCensura.ERROR_INTERNO
     assert _archivos(dest) == []
 
 
@@ -747,34 +953,326 @@ def _res(estado, motivo, **kw):
     return ResultadoCensura(estado=estado, motivo=motivo, **kw)
 
 
-def test_resumen_mensaje_con_las_tres_cifras_y_desglose():
-    resumen = ResumenLote(total=6)
-    resumen.agregar(_res(EstadoCensura.PROCESADO, MotivoCensura.OK,
-                         terminos_sin_coincidencias=2, paginas_con_imagenes=3,
-                         paginas_solo_vectoriales=1, output_path=Path("/x/a.pdf")))
-    resumen.agregar(_res(EstadoCensura.OMITIDO, MotivoCensura.SIN_COINCIDENCIAS,
-                         terminos_sin_coincidencias=1))
-    for _ in range(2):
-        resumen.agregar(ResultadoCensura.fallo(MotivoCensura.SIN_CAPA_TEXTO, paginas_con_imagenes=9))
-    resumen.agregar(ResultadoCensura.fallo(MotivoCensura.VERIFICACION_FALLIDA))
-    resumen.agregar(ResultadoCensura.fallo(MotivoCensura.IMPORTE_NO_INTERPRETABLE))
+def _ok(**kw):
+    kw.setdefault("output_path", Path("/x/salida.pdf"))
+    return _res(EstadoCensura.PROCESADO, MotivoCensura.OK, **kw)
 
+
+def _omitido(**kw):
+    return _res(EstadoCensura.OMITIDO, MotivoCensura.SIN_COINCIDENCIAS, **kw)
+
+
+def _error(motivo, **kw):
+    return ResultadoCensura.fallo(motivo, **kw)
+
+
+AVISO_IMAGENES = (
+    "Aviso: {n} página(s) contienen imágenes. Si el texto está dentro de una imagen "
+    "(por ejemplo, un DNI fotografiado) no se puede censurar automáticamente: revísalas."
+)
+AVISO_VECTORIALES = (
+    "Aviso: {n} página(s) sin texto con dibujos; si contienen texto convertido en "
+    "trazados no se ha podido censurar: revísalas."
+)
+
+
+def test_mensaje_exito():
+    resumen = ResumenLote(total=1)
+    resumen.agregar(_ok(coincidencias=4, paginas_afectadas=2, terminos_buscados=2), "a.pdf")
+    assert resumen.mensaje() == (
+        "Censura completada en 1 de 1 PDF(s): 4 coincidencia(s) tachada(s) en 2 página(s)."
+    )
+
+
+def test_mensaje_exito_con_palabras_sin_coincidencias_solo_si_es_un_pdf():
+    uno = ResumenLote(total=1)
+    uno.agregar(_ok(coincidencias=1, paginas_afectadas=1, terminos_buscados=3,
+                    terminos_sin_coincidencias=2), "a.pdf")
+    assert uno.mensaje() == (
+        "Censura completada en 1 de 1 PDF(s): 1 coincidencia(s) tachada(s) en 1 página(s). "
+        "2 de las 3 palabras no se encontraron."
+    )
+
+    varios = ResumenLote(total=2)
+    varios.agregar(_ok(coincidencias=1, paginas_afectadas=1, terminos_buscados=3,
+                       terminos_sin_coincidencias=2), "a.pdf")
+    varios.agregar(_ok(coincidencias=1, paginas_afectadas=1, terminos_buscados=3), "b.pdf")
+    assert "no se encontraron" not in varios.mensaje()
+
+
+def test_mensaje_omitido():
+    resumen = ResumenLote(total=1)
+    resumen.agregar(_omitido(terminos_buscados=2, terminos_sin_coincidencias=2), "vacio.pdf")
+    assert resumen.mensaje() == (
+        "No se ha creado ningún archivo. "
+        "1 PDF(s) sin coincidencias; no se ha creado archivo (vacio.pdf). "
+        "2 de las 2 palabras no se encontraron."
+    )
+
+
+CASOS_ERROR = [
+    (MotivoCensura.SIN_CAPA_TEXTO, {},
+     "1 PDF(s) son imágenes escaneadas sin texto: conviértelos antes con "
+     "«PDF escaneado a PDF OCR» (x.pdf)."),
+    (MotivoCensura.VERIFICACION_FALLIDA, {"fallos_verificacion": ("texto_normalizado",)},
+     "1 PDF(s) no se han creado por seguridad: tras censurar, el texto seguía apareciendo "
+     "en el texto de las páginas (x.pdf)."),
+    (MotivoCensura.IMPORTE_NO_INTERPRETABLE, {},
+     "1 PDF(s) tienen la frase «Siendo … lo pagado» con un importe que no se puede "
+     "interpretar; revisa el formato, p. ej. 1.234,56 € (x.pdf)."),
+    (MotivoCensura.PDF_NO_ABRE, {}, "1 PDF(s) no se han podido abrir o están dañados (x.pdf)."),
+    (MotivoCensura.PDF_CIFRADO, {}, "1 PDF(s) están protegidos con contraseña (x.pdf)."),
+    (MotivoCensura.RANGO_INVALIDO, {},
+     "1 PDF(s) no tienen las páginas indicadas en el rango (x.pdf)."),
+    (MotivoCensura.ERROR_INTERNO, {},
+     "1 PDF(s) han fallado por un error inesperado; consulta el registro (x.pdf)."),
+    (MotivoCensura.ARCHIVO_NO_ENCONTRADO, {},
+     "1 PDF(s) no se pueden entregar: el archivo de salida no existe (x.pdf)."),
+]
+
+
+@pytest.mark.parametrize("motivo,extra,frase", CASOS_ERROR, ids=[c[0].value for c in CASOS_ERROR])
+def test_mensaje_error_por_motivo(motivo, extra, frase):
+    resumen = ResumenLote(total=1)
+    resumen.agregar(_error(motivo, **extra), "x.pdf")
+    assert resumen.mensaje() == "No se ha creado ningún archivo. " + frase
+
+
+def test_todos_los_motivos_de_error_tienen_frase():
+    errores = set(MotivoCensura) - {MotivoCensura.OK, MotivoCensura.SIN_COINCIDENCIAS}
+    assert errores == set(core.FRASES_ERROR)
+    assert errores == set(core.ORDEN_ERRORES)
+
+
+CASOS_CAUSAS = [
+    (("search_for",), "el texto de las páginas"),
+    (("texto_normalizado",), "el texto de las páginas"),
+    (("texto_fuera_de_pagina",), "el texto de las páginas"),
+    (("coincidencia_no_localizada",), "el texto de las páginas"),
+    (("anotaciones",), "comentarios o anotaciones"),
+    (("campos_formulario",), "campos de formulario"),
+    (("enlaces",), "enlaces"),
+    (("outline",), "marcadores"),
+    (("nombres_destino",), "destinos internos"),
+    (("adjuntos",), "archivos adjuntos"),
+    (("metadatos_info",), "metadatos"),
+    (("metadatos_xmp",), "metadatos"),
+    (("num_paginas",), "una comprobación interna"),
+    (("error_verificacion",), "una comprobación interna"),
+    (("categoria_desconocida",), "una comprobación interna"),
+    ((), "una comprobación interna"),
+    (("metadatos_xmp", "metadatos_info", "search_for", "texto_normalizado"),
+     "el texto de las páginas y metadatos"),
+    (("outline", "enlaces", "anotaciones", "metadatos_info"),
+     "comentarios o anotaciones, enlaces, marcadores y metadatos"),
+]
+
+
+@pytest.mark.parametrize("fallos,causa", CASOS_CAUSAS)
+def test_mensaje_verificacion_fallida_traduce_las_causas(fallos, causa):
+    resumen = ResumenLote(total=1)
+    resumen.agregar(
+        _error(MotivoCensura.VERIFICACION_FALLIDA, fallos_verificacion=fallos), "x.pdf"
+    )
+    assert resumen.mensaje() == (
+        "No se ha creado ningún archivo. 1 PDF(s) no se han creado por seguridad: "
+        f"tras censurar, el texto seguía apareciendo en {causa} (x.pdf)."
+    )
+
+
+def test_mensaje_verificacion_fallida_une_las_causas_de_varios_pdf():
+    resumen = ResumenLote(total=3)
+    resumen.agregar(_error(MotivoCensura.VERIFICACION_FALLIDA,
+                           fallos_verificacion=("campos_formulario",)), "a.pdf")
+    resumen.agregar(_error(MotivoCensura.VERIFICACION_FALLIDA,
+                           fallos_verificacion=("anotaciones", "campos_formulario")), "b.pdf")
+    resumen.agregar(_error(MotivoCensura.VERIFICACION_FALLIDA,
+                           fallos_verificacion=("anotaciones",)), "c.pdf")
+    assert resumen.fallos_verificacion == {"campos_formulario": 2, "anotaciones": 2}
+    assert resumen.mensaje() == (
+        "No se ha creado ningún archivo. 3 PDF(s) no se han creado por seguridad: tras "
+        "censurar, el texto seguía apareciendo en comentarios o anotaciones y campos de "
+        "formulario (a.pdf, b.pdf, c.pdf)."
+    )
+
+
+def _resumen_mezcla():
+    resumen = ResumenLote(total=7)
+    resumen.agregar(_ok(coincidencias=3, paginas_afectadas=2, importes_autodetectados=2,
+                        formularios_aplanados=True, paginas_con_imagenes=1,
+                        terminos_buscados=4), "uno.pdf")
+    resumen.agregar(_ok(coincidencias=2, paginas_afectadas=1, paginas_solo_vectoriales=2,
+                        terminos_buscados=3, terminos_sin_coincidencias=1), "dos.pdf")
+    resumen.agregar(_omitido(terminos_buscados=2, terminos_sin_coincidencias=2), "vacio.pdf")
+    resumen.agregar(_error(MotivoCensura.SIN_CAPA_TEXTO, paginas_con_imagenes=9), "escaneo.pdf")
+    resumen.agregar(_error(MotivoCensura.PDF_CIFRADO), "clave.pdf")
+    resumen.agregar(_error(MotivoCensura.PDF_NO_ABRE), "roto.pdf")
+    resumen.agregar(_error(MotivoCensura.VERIFICACION_FALLIDA,
+                           fallos_verificacion=("anotaciones", "enlaces"),
+                           coincidencias=50, paginas_afectadas=40), "seg.pdf")
+    return resumen
+
+
+def test_mensaje_mezcla_de_lote():
+    resumen = _resumen_mezcla()
+    assert (resumen.procesados, resumen.omitidos, resumen.errores) == (2, 1, 4)
+    # Solo los PDFs procesados suman coincidencias/páginas; los fallidos no suman avisos.
+    assert (resumen.coincidencias, resumen.paginas_afectadas) == (5, 3)
+    assert resumen.importes_autodetectados == 2
+    assert resumen.pdf_con_formularios_aplanados == 1
+    assert resumen.mensaje() == " ".join([
+        "Censura completada en 2 de 7 PDF(s): 5 coincidencia(s) tachada(s) en 3 página(s).",
+        "1 PDF(s) sin coincidencias; no se ha creado archivo (vacio.pdf).",
+        "1 PDF(s) son imágenes escaneadas sin texto: conviértelos antes con "
+        "«PDF escaneado a PDF OCR» (escaneo.pdf).",
+        "1 PDF(s) no se han creado por seguridad: tras censurar, el texto seguía "
+        "apareciendo en comentarios o anotaciones y enlaces (seg.pdf).",
+        "1 PDF(s) no se han podido abrir o están dañados (roto.pdf).",
+        "1 PDF(s) están protegidos con contraseña (clave.pdf).",
+        AVISO_IMAGENES.format(n=1),
+        AVISO_VECTORIALES.format(n=2),
+        "Se detectaron 2 importe(s) con la regla «Siendo … lo pagado».",
+        "Los campos de formulario se han convertido en contenido fijo.",
+    ])
+
+
+@pytest.mark.parametrize("cantidad", [5, 6, 7])
+def test_mensaje_limita_los_nombres_a_cinco(cantidad):
+    resumen = ResumenLote(total=cantidad)
+    for i in range(1, cantidad + 1):
+        resumen.agregar(_omitido(), f"o{i}.pdf")
+    cinco = ", ".join(f"o{i}.pdf" for i in range(1, 6))
+    resto = f" y {cantidad - 5} más" if cantidad > 5 else ""
+    assert resumen.mensaje() == (
+        "No se ha creado ningún archivo. "
+        f"{cantidad} PDF(s) sin coincidencias; no se ha creado archivo ({cinco}{resto})."
+    )
+
+
+def test_mensaje_limita_los_nombres_de_errores_por_causa():
+    resumen = ResumenLote(total=8)
+    for i in range(1, 7):
+        resumen.agregar(_error(MotivoCensura.PDF_CIFRADO), f"c{i}.pdf")
+    resumen.agregar(_error(MotivoCensura.PDF_NO_ABRE), "roto.pdf")
     msg = resumen.mensaje()
-    assert (resumen.procesados, resumen.omitidos, resumen.errores) == (1, 1, 4)
-    assert "1 procesado(s)" in msg and "1 omitido(s)" in msg and "4 con error" in msg
-    assert "2 sin capa de texto: aplica OCR antes" in msg
-    assert "1 no superaron la verificación final" in msg
-    assert "Términos sin coincidencias: 3" in msg
-    assert "3 página(s) con imágenes" in msg and "NO se censura" in msg  # los 9 de errores no suman
-    assert "1 página(s) solo vectoriales" in msg
-    assert not msg.startswith("No se censuró")
+    assert ("6 PDF(s) están protegidos con contraseña "
+            "(c1.pdf, c2.pdf, c3.pdf, c4.pdf, c5.pdf y 1 más).") in msg
+    assert "c6.pdf" not in msg
+    assert "1 PDF(s) no se han podido abrir o están dañados (roto.pdf)." in msg
+
+
+def test_mensaje_solo_usa_el_nombre_base_y_una_linea():
+    resumen = ResumenLote(total=2)
+    resumen.agregar(_omitido(), "/Users/ana/Expedientes secretos/a.pdf")
+    resumen.agregar(_omitido(), "uno\ndos.pdf")
+    msg = resumen.mensaje()
+    assert "(a.pdf, uno dos.pdf)" in msg
+    assert "/Users" not in msg and "Expedientes" not in msg
+    assert "\n" not in msg
+
+
+def test_mensaje_sin_nombres_no_añade_parentesis():
+    resumen = ResumenLote(total=1)
+    resumen.agregar(_omitido())
+    assert resumen.mensaje() == (
+        "No se ha creado ningún archivo. 1 PDF(s) sin coincidencias; no se ha creado archivo."
+    )
+
+
+def _resumenes_variados():
+    solo_metadatos = ResumenLote(total=1)
+    solo_metadatos.agregar(_error(MotivoCensura.VERIFICACION_FALLIDA,
+                                  fallos_verificacion=("metadatos_info",)), "x.pdf")
+    todos_los_errores = ResumenLote(total=len(CASOS_ERROR))
+    for motivo, extra, _ in CASOS_ERROR:
+        todos_los_errores.agregar(_error(motivo, **extra), "x.pdf")
+    return [_resumen_mezcla(), solo_metadatos, todos_los_errores]
+
+
+def test_mensajes_una_linea_y_sin_palabras_tecnicas():
+    for resumen in _resumenes_variados():
+        msg = resumen.mensaje()
+        assert "\n" not in msg and "\r" not in msg
+        assert TERMINO not in msg and TERMINO.lower() not in msg
+        assert "título" not in msg.lower() and "autor" not in msg.lower()
+        # "metadatos" solo aparece como causa de una verificación fallida.
+        if "metadatos" in msg:
+            assert "el texto seguía apareciendo en" in msg
+    assert "metadatos" not in _resumen_mezcla().mensaje()
 
 
 def test_resumen_sin_ningun_procesado_no_presenta_exito():
     resumen = ResumenLote(total=2)
-    resumen.agregar(_res(EstadoCensura.OMITIDO, MotivoCensura.SIN_COINCIDENCIAS))
+    resumen.agregar(_omitido())
     resumen.agregar(ResultadoCensura.fallo(MotivoCensura.SIN_CAPA_TEXTO))
-    assert resumen.mensaje().startswith("No se censuró ningún PDF.")
+    assert resumen.mensaje().startswith("No se ha creado ningún archivo.")
+    assert "Censura completada" not in resumen.mensaje()
+
+
+def test_resumen_acumula_importes_y_coincidencias_solo_de_procesados():
+    resumen = ResumenLote(total=3)
+    resumen.agregar(_ok(coincidencias=2, paginas_afectadas=1, importes_autodetectados=1), "a.pdf")
+    resumen.agregar(_omitido(importes_autodetectados=5), "b.pdf")
+    resumen.agregar(_error(MotivoCensura.VERIFICACION_FALLIDA, coincidencias=9,
+                           paginas_afectadas=9, importes_autodetectados=7), "c.pdf")
+    assert resumen.coincidencias == 2
+    assert resumen.paginas_afectadas == 1
+    assert resumen.importes_autodetectados == 1
+    assert resumen.omitidos_detalle == [("b.pdf", MotivoCensura.SIN_COINCIDENCIAS)]
+    assert resumen.errores_detalle == [("c.pdf", MotivoCensura.VERIFICACION_FALLIDA)]
+
+
+def test_revalidar_reclasifica_los_procesados_sin_archivo(tmp_path):
+    real = tmp_path / "real_censurado.pdf"
+    real.write_bytes(b"x")
+    resumen = ResumenLote(total=3)
+    resumen.agregar(_ok(coincidencias=2, paginas_afectadas=1, importes_autodetectados=1,
+                        output_path=real), "real.pdf")
+    resumen.agregar(_ok(coincidencias=7, paginas_afectadas=3, importes_autodetectados=2,
+                        formularios_aplanados=True,
+                        output_path=tmp_path / "fantasma_censurado.pdf"), "fantasma.pdf")
+    resumen.agregar(_ok(coincidencias=1, paginas_afectadas=1, output_path=None), "sin_ruta.pdf")
+
+    assert resumen.revalidar_archivos() == 2
+
+    assert (resumen.procesados, resumen.errores, resumen.omitidos) == (1, 2, 0)
+    assert resumen.errores_por_motivo == {MotivoCensura.ARCHIVO_NO_ENCONTRADO: 2}
+    assert resumen.errores_detalle == [
+        ("fantasma.pdf", MotivoCensura.ARCHIVO_NO_ENCONTRADO),
+        ("sin_ruta.pdf", MotivoCensura.ARCHIVO_NO_ENCONTRADO),
+    ]
+    # Los contadores solo reflejan lo que existe físicamente.
+    assert (resumen.coincidencias, resumen.paginas_afectadas) == (2, 1)
+    assert resumen.importes_autodetectados == 1
+    assert resumen.pdf_con_formularios_aplanados == 0
+    assert resumen.archivos_existentes() == [real]
+    assert resumen.mensaje() == (
+        "Censura completada en 1 de 3 PDF(s): 2 coincidencia(s) tachada(s) en 1 página(s). "
+        "2 PDF(s) no se pueden entregar: el archivo de salida no existe "
+        "(fantasma.pdf, sin_ruta.pdf). "
+        "Se detectaron 1 importe(s) con la regla «Siendo … lo pagado»."
+    )
+    # Idempotente.
+    assert resumen.revalidar_archivos() == 0
+
+
+def test_revalidar_sin_cambios_no_toca_nada(tmp_path):
+    real = tmp_path / "a_censurado.pdf"
+    real.write_bytes(b"x")
+    resumen = ResumenLote(total=1)
+    resumen.agregar(_ok(coincidencias=2, paginas_afectadas=1, output_path=real), "a.pdf")
+    antes = resumen.mensaje()
+    assert resumen.revalidar_archivos() == 0
+    assert resumen.mensaje() == antes and resumen.procesados == 1
+
+
+def test_revalidar_trata_una_carpeta_como_archivo_inexistente(tmp_path):
+    carpeta = tmp_path / "no_es_archivo"
+    carpeta.mkdir()
+    resumen = ResumenLote(total=1)
+    resumen.agregar(_ok(output_path=carpeta), "a.pdf")
+    assert resumen.revalidar_archivos() == 1
+    assert (resumen.procesados, resumen.errores) == (0, 1)
 
 
 def test_resumen_archivos_solo_existentes(tmp_path):
@@ -818,13 +1316,31 @@ def test_lote_contabiliza_procesados_omitidos_y_errores(tmp_path):
     )
 
     stats = res["stats"]
-    assert (stats["total"], stats["procesados"], stats["omitidos"], stats["errores"]) == (3, 1, 1, 1)
-    assert stats["errores_sin_capa_texto"] == 1
+    assert stats == {
+        "total": 3, "procesados": 1, "omitidos": 1, "errores": 1,
+        "coincidencias_censuradas": 1, "paginas_censuradas": 1,
+    }
     assert progreso == [(1, 3), (2, 3), (3, 3)]
     assert [Path(f).name for f in res["files"]] == ["ok_censurado.pdf"]
     assert all(Path(f).is_file() for f in res["files"])
-    assert "sin capa de texto: aplica OCR antes" in res["message"]
+    assert res["message"] == " ".join([
+        "Censura completada en 1 de 3 PDF(s): 1 coincidencia(s) tachada(s) en 1 página(s).",
+        "1 PDF(s) sin coincidencias; no se ha creado archivo (vacio.pdf).",
+        "1 PDF(s) son imágenes escaneadas sin texto: conviértelos antes con "
+        "«PDF escaneado a PDF OCR» (img.pdf).",
+    ])
+    assert "\n" not in res["message"]
     assert res["output_dir"] == str(tmp_path / "PDF_censurados")
+
+
+def test_lote_stats_solo_tienen_las_claves_publicas(tmp_path):
+    ok = _crear_pdf(tmp_path / "ok.pdf", [f"Cliente {TERMINO}"])
+    img = _crear_pdf_solo_imagen(tmp_path / "img.pdf")
+    res = script._ejecutar_lote([ok, img], _cfg())
+    assert set(res["stats"]) == {
+        "total", "procesados", "omitidos", "errores",
+        "coincidencias_censuradas", "paginas_censuradas",
+    }
 
 
 def test_lote_todos_fallan_no_presenta_exito(tmp_path):
@@ -835,8 +1351,11 @@ def test_lote_todos_fallan_no_presenta_exito(tmp_path):
 
     assert res["stats"]["procesados"] == 0
     assert res["stats"]["errores"] == 2
-    assert res["message"].startswith("No se censuró ningún PDF.")
-    assert "2 sin capa de texto: aplica OCR antes" in res["message"]
+    assert res["message"] == (
+        "No se ha creado ningún archivo. "
+        "2 PDF(s) son imágenes escaneadas sin texto: conviértelos antes con "
+        "«PDF escaneado a PDF OCR» (a.pdf, b.pdf)."
+    )
     assert res["files"] == []
     assert _archivos(tmp_path / "PDF_censurados") == []
     # Apunta a la carpeta de origen si no se creó la de salida.
@@ -847,7 +1366,8 @@ def test_lote_todos_omitidos_no_presenta_exito(tmp_path):
     a = _crear_pdf(tmp_path / "a.pdf", ["Nada"])
     res = script._ejecutar_lote([a], _cfg())
     assert res["stats"]["omitidos"] == 1 and res["stats"]["procesados"] == 0
-    assert res["message"].startswith("No se censuró ningún PDF.")
+    assert res["message"].startswith("No se ha creado ningún archivo.")
+    assert "1 PDF(s) sin coincidencias; no se ha creado archivo (a.pdf)." in res["message"]
 
 
 def test_lote_rango_fuera_de_limites_es_error_rango_invalido(tmp_path):
@@ -856,7 +1376,7 @@ def test_lote_rango_fuera_de_limites_es_error_rango_invalido(tmp_path):
         [a], _cfg(all_pages=False, ranges=[(1, 7)])
     )
     assert res["stats"]["errores"] == 1
-    assert res["stats"]["errores_rango_invalido"] == 1
+    assert "1 PDF(s) no tienen las páginas indicadas en el rango (a.pdf)." in res["message"]
 
 
 def test_lote_rango_de_paginas_se_respeta(tmp_path):
@@ -864,7 +1384,8 @@ def test_lote_rango_de_paginas_se_respeta(tmp_path):
     res = script._ejecutar_lote([pdf], _cfg(all_pages=False, ranges=[(1, 2)]))
     assert res["stats"]["procesados"] == 1
     res2 = script._ejecutar_lote([pdf], _cfg(all_pages=False, ranges=[(3, 3)]))
-    assert res2["stats"]["errores_sin_capa_texto"] == 1
+    assert res2["stats"]["errores"] == 1
+    assert "son imágenes escaneadas sin texto" in res2["message"]
 
 
 def test_lote_lista_vacia_sin_importes_se_rechaza(tmp_path):
@@ -917,13 +1438,127 @@ def test_lote_no_registra_terminos_nombres_ni_rutas(tmp_path, log_docflow):
     img = _crear_pdf_solo_imagen(tmp_path / "escaneoPRIVADO88.pdf")
     vacio = _crear_pdf(tmp_path / "vacioRESERVADO99.pdf", ["Nada"])
 
-    script._ejecutar_lote([ok, img, vacio], _cfg(words=[TERMINO, "Cliente"]))
+    res = script._ejecutar_lote([ok, img, vacio], _cfg(words=[TERMINO, "Cliente"]))
 
     mensajes = "\n".join(r.getMessage() for r in log_docflow.records)
     assert "archivo 1 de 3" in mensajes and "archivo 3 de 3" in mensajes
     for prohibido in (TERMINO, TERMINO.lower(), "Cliente", "SECRETO77", "PRIVADO88",
                       "RESERVADO99", str(tmp_path), "PDF_censurados", ".pdf"):
         assert prohibido not in mensajes
+    # Los nombres base sí aparecen en el mensaje visible (y solo ahí).
+    assert "escaneoPRIVADO88.pdf" in res["message"]
+    assert "vacioRESERVADO99.pdf" in res["message"]
+    assert str(tmp_path) not in res["message"]
+
+
+def test_lote_log_por_archivo_incluye_fallos_importes_y_formularios(tmp_path, log_docflow,
+                                                                    monkeypatch):
+    form = _crear_formulario(tmp_path / "formularioPRIVADO55.pdf")
+    limpio = _crear_formulario(tmp_path / "limpioPRIVADO56.pdf", termino_en_campos=False)
+    img = _crear_pdf_solo_imagen(tmp_path / "escaneoPRIVADO57.pdf")
+    script._ejecutar_lote([form, limpio, img], _cfg())
+
+    lineas = [r.getMessage() for r in log_docflow.records if "archivo " in r.getMessage()]
+    assert len(lineas) == 3
+    assert re.search(r"estado=procesado motivo=ok .*fallos=- importes_autodetectados=0 "
+                     r"formularios_aplanados=1$", lineas[0])
+    assert re.search(r"estado=procesado motivo=ok .*fallos=- importes_autodetectados=0 "
+                     r"formularios_aplanados=0$", lineas[1])
+    assert re.search(r"estado=error motivo=sin_capa_texto .*fallos=- "
+                     r"importes_autodetectados=0 formularios_aplanados=0$", lineas[2])
+    # Formato anterior conservado.
+    assert "coincidencias=" in lineas[0] and "paginas_afectadas=" in lineas[0]
+    assert "terminos_sin_coincidencias=" in lineas[0]
+    assert "paginas_con_imagenes=" in lineas[0] and "paginas_solo_vectoriales=" in lineas[0]
+
+    monkeypatch.setattr(core, "verificar_salida",
+                        lambda *a, **k: ["campos_formulario", "anotaciones"])
+    log_docflow.clear()
+    script._ejecutar_lote([form], _cfg())
+    linea = next(r.getMessage() for r in log_docflow.records if "archivo " in r.getMessage())
+    assert "estado=error motivo=verificacion_fallida" in linea
+    assert "fallos=campos_formulario,anotaciones " in linea
+    assert linea.endswith("formularios_aplanados=1")
+    for prohibido in ("PRIVADO55", TERMINO, ".pdf", str(tmp_path)):
+        assert prohibido not in "\n".join(r.getMessage() for r in log_docflow.records)
+
+
+def test_lote_formulario_e_importes_se_cuentan_y_se_explican_en_el_mensaje(tmp_path):
+    pdf = _crear_formulario(
+        tmp_path / "f.pdf",
+        lineas_extra=["Siendo 1.000,00 € lo pagado", "Honorarios 150,00 €", "Resto 850,00 €"],
+    )
+    res = script._ejecutar_lote([pdf], _cfg(importes=True))
+
+    stats = res["stats"]
+    assert stats["procesados"] == 1 and stats["errores"] == 0
+    assert stats["coincidencias_censuradas"] >= 5  # término x3, 2 importes
+    assert stats["paginas_censuradas"] == 1
+    msg = res["message"]
+    assert msg.startswith(
+        f"Censura completada en 1 de 1 PDF(s): {stats['coincidencias_censuradas']} "
+        "coincidencia(s) tachada(s) en 1 página(s)."
+    )
+    assert msg.endswith(
+        "Se detectaron 2 importe(s) con la regla «Siendo … lo pagado». "
+        "Los campos de formulario se han convertido en contenido fijo."
+    )
+    texto = _texto_pdf(Path(res["files"][0]))
+    assert "150,00" not in texto and "850,00" not in texto
+    assert TERMINO.lower() not in normalizar_texto(texto)
+
+
+def test_lote_revalida_que_cada_procesado_tiene_su_archivo(tmp_path, monkeypatch, log_docflow):
+    a = _crear_pdf(tmp_path / "aaPRIVADO1.pdf", [f"Cliente {TERMINO}"])
+    b = _crear_pdf(tmp_path / "bbPRIVADO2.pdf", [f"Cliente {TERMINO}"])
+    original = script._procesar_un_pdf
+
+    def procesa_y_borra(pdf_path, *args, **kwargs):
+        resultado = original(pdf_path, *args, **kwargs)
+        if Path(pdf_path).name == "aaPRIVADO1.pdf":
+            resultado.output_path.unlink()  # el archivo desaparece tras procesarse
+        return resultado
+
+    monkeypatch.setattr(script, "_procesar_un_pdf", procesa_y_borra)
+    res = script._ejecutar_lote([a, b], _cfg())
+
+    stats = res["stats"]
+    assert (stats["total"], stats["procesados"], stats["omitidos"], stats["errores"]) == (2, 1, 0, 1)
+    assert stats["coincidencias_censuradas"] == 1 and stats["paginas_censuradas"] == 1
+    assert [Path(f).name for f in res["files"]] == ["bbPRIVADO2_censurado.pdf"]
+    assert len(res["files"]) == stats["procesados"] == len(
+        list((tmp_path / "PDF_censurados").glob("*_censurado.pdf"))
+    )
+    assert res["message"] == (
+        "Censura completada en 1 de 2 PDF(s): 1 coincidencia(s) tachada(s) en 1 página(s). "
+        "1 PDF(s) no se pueden entregar: el archivo de salida no existe (aaPRIVADO1.pdf)."
+    )
+    registro = "\n".join(r.getMessage() for r in log_docflow.records)
+    assert "Revalidación: 1 PDF(s)" in registro
+    assert "PRIVADO" not in registro and ".pdf" not in registro
+    assert "Procesados: 1. Omitidos: 0. Errores: 1" in registro  # contadores ya corregidos
+
+
+def test_lote_cancelado_tambien_revalida_los_archivos(tmp_path, monkeypatch):
+    pdfs = [_crear_pdf(tmp_path / f"{n}.pdf", [f"Cliente {TERMINO}"]) for n in "ab"]
+    original = script._procesar_un_pdf
+
+    def procesa_y_borra(pdf_path, *args, **kwargs):
+        resultado = original(pdf_path, *args, **kwargs)
+        resultado.output_path.unlink()
+        return resultado
+
+    monkeypatch.setattr(script, "_procesar_un_pdf", procesa_y_borra)
+    hechos = []
+    with pytest.raises(CancelledByUser) as exc:
+        script._ejecutar_lote(
+            pdfs, _cfg(),
+            progress=lambda i, n: hechos.append(i),
+            is_cancelled=lambda: len(hechos) >= 1,
+        )
+    stats = exc.value.result["stats"]
+    assert stats["procesados"] == 0 and stats["errores"] == 1
+    assert exc.value.result["files"] == []
 
 
 def test_run_usa_dialogo_y_devuelve_resultado(tmp_path, monkeypatch):

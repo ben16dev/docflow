@@ -165,8 +165,6 @@ def _resultado_lote(resumen: ResumenLote, salida_dir: Path, *, cancelado: bool =
         resumen.total - resumen.procesados - resumen.omitidos - resumen.errores, 0
     )
 
-    extra = {f"errores_{m.value}": n for m, n in resumen.errores_por_motivo.items()}
-
     # Si no se creó la carpeta de salida (nada procesado), se apunta a la de origen.
     output_dir = salida_dir if salida_dir.is_dir() else salida_dir.parent
 
@@ -178,10 +176,9 @@ def _resultado_lote(resumen: ResumenLote, salida_dir: Path, *, cancelado: bool =
         errores=resumen.errores,
         omitidos=resumen.omitidos + (pendientes if cancelado else 0),
         files=resumen.archivos_existentes(),
-        terminos_sin_coincidencias=resumen.terminos_sin_coincidencias,
-        paginas_con_imagenes=resumen.paginas_con_imagenes,
-        paginas_solo_vectoriales=resumen.paginas_solo_vectoriales,
-        **extra,
+        # El resto de información (avisos, causas de error…) va en el mensaje.
+        coincidencias_censuradas=resumen.coincidencias,
+        paginas_censuradas=resumen.paginas_afectadas,
     )
 
 
@@ -207,6 +204,20 @@ def _procesar_un_pdf(pdf_path, salida_dir, cfg, is_cancelled) -> ResultadoCensur
     )
 
 
+def _revalidar_salidas(resumen: ResumenLote) -> None:
+    """
+    Revalidación final: cada PDF "procesado" debe tener su archivo de salida.
+    Los que no lo tengan pasan a error (ARCHIVO_NO_ENCONTRADO) y los contadores
+    se recalculan, de modo que el resultado coincide con los archivos físicos.
+    """
+    reclasificados = resumen.revalidar_archivos()
+    if reclasificados:
+        logger.warning(
+            f"[PDF-CENSURA] Revalidación: {reclasificados} PDF(s) procesado(s) "
+            "sin archivo de salida (reclasificados como error)"
+        )
+
+
 def _ejecutar_lote(pdf_paths, cfg, progress=None, is_cancelled=None) -> dict:
     # Defensa en profundidad: lista vacía solo con la casilla de importes activa.
     validar_terminos(cfg["words"], cfg.get("detectar_importes", True))
@@ -216,7 +227,8 @@ def _ejecutar_lote(pdf_paths, cfg, progress=None, is_cancelled=None) -> dict:
     total = len(pdf_paths)
     resumen = ResumenLote(total=total)
 
-    # Nunca se registran términos, texto, nombres de archivo ni rutas.
+    # Nunca se registran términos, texto, nombres de archivo ni rutas. El nombre
+    # base solo se pasa al resumen, que lo usa únicamente en el mensaje visible.
     logger.info(f"[PDF-CENSURA] Procesando {total} PDF(s)")
 
     try:
@@ -226,7 +238,7 @@ def _ejecutar_lote(pdf_paths, cfg, progress=None, is_cancelled=None) -> dict:
                 raise CancelledByUser()
 
             resultado = _procesar_un_pdf(pdf_path, salida_dir, cfg, is_cancelled)
-            resumen.agregar(resultado)
+            resumen.agregar(resultado, pdf_path.name)
 
             logger.info(
                 f"[PDF-CENSURA] archivo {idx} de {total}: "
@@ -235,19 +247,25 @@ def _ejecutar_lote(pdf_paths, cfg, progress=None, is_cancelled=None) -> dict:
                 f"paginas_afectadas={resultado.paginas_afectadas} "
                 f"terminos_sin_coincidencias={resultado.terminos_sin_coincidencias} "
                 f"paginas_con_imagenes={resultado.paginas_con_imagenes} "
-                f"paginas_solo_vectoriales={resultado.paginas_solo_vectoriales}"
+                f"paginas_solo_vectoriales={resultado.paginas_solo_vectoriales} "
+                f"fallos={','.join(resultado.fallos_verificacion) or '-'} "
+                f"importes_autodetectados={resultado.importes_autodetectados} "
+                f"formularios_aplanados={int(resultado.formularios_aplanados)}"
             )
 
             if progress:
                 progress(idx, total)
 
     except CancelledByUser:
+        _revalidar_salidas(resumen)
         logger.info(
             f"[PDF-CENSURA] Cancelado por usuario. "
             f"Procesados: {resumen.procesados}. Omitidos: {resumen.omitidos}. "
             f"Errores: {resumen.errores}"
         )
         raise CensuraLoteCancelada(_resultado_lote(resumen, salida_dir, cancelado=True))
+
+    _revalidar_salidas(resumen)
 
     logger.info(
         f"[PDF-CENSURA] Finalizado. Procesados: {resumen.procesados}. "

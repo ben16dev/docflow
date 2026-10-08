@@ -9,7 +9,11 @@ peor que no generar ningún archivo. Por eso:
   - Cualquier duda (página escaneada, verificación fallida, importe ilegible,
     excepción inesperada) acaba en estado "error" y SIN archivo de salida.
   - El PDF original no se modifica nunca.
-  - Ni los resultados ni los logs contienen términos, texto ni rutas.
+  - Ni los resultados ni los logs contienen términos, texto ni rutas. Los nombres
+    base de los PDFs omitidos o fallidos solo aparecen en ResumenLote.mensaje()
+    (mensaje visible); nunca en logs ni en excepciones.
+  - Campos de formulario con un término: se aplanan (Document.bake) y se tachan
+    como texto de página; si no hay término en ningún campo, el formulario se conserva.
 
 Nota sobre PyMuPDF 1.25.1 (verificado en el entorno del proyecto):
   - ``Document.scrub(reset_responses=True)`` lanza AttributeError con cualquier
@@ -28,10 +32,11 @@ import secrets
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
+from dataclasses import fields as dataclass_fields
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Collection, Iterable, List, Optional, Sequence
+from typing import Callable, Collection, Iterable, List, Optional, Sequence, Tuple
 
 from logger import logger
 from scripts.common.filenames import resolve_conflict
@@ -74,20 +79,77 @@ class MotivoCensura(str, Enum):
     PDF_CIFRADO = "pdf_cifrado"
     RANGO_INVALIDO = "rango_invalido"
     ERROR_INTERNO = "error_interno"
+    ARCHIVO_NO_ENCONTRADO = "archivo_no_encontrado"
 
 
-# Texto para el resumen al usuario (sin términos ni nombres de archivo).
-ETIQUETAS_MOTIVO = {
-    MotivoCensura.SIN_COINCIDENCIAS: "sin coincidencias",
-    MotivoCensura.SIN_CAPA_TEXTO: "sin capa de texto: aplica OCR antes",
-    MotivoCensura.VERIFICACION_FALLIDA: "no superaron la verificación final",
+# Frases del mensaje al usuario por motivo de error. "{n}" = nº de PDFs.
+# Redactadas en español llano; sin términos y sin nombres de archivo (estos los
+# añade ResumenLote, solo en el mensaje visible).
+FRASES_ERROR = {
+    MotivoCensura.SIN_CAPA_TEXTO:
+        "{n} PDF(s) son imágenes escaneadas sin texto: conviértelos antes con "
+        "«PDF escaneado a PDF OCR»",
+    MotivoCensura.VERIFICACION_FALLIDA:
+        "{n} PDF(s) no se han creado por seguridad: tras censurar, el texto "
+        "seguía apareciendo en {causas}",
     MotivoCensura.IMPORTE_NO_INTERPRETABLE:
-        "con un importe 'Siendo … lo pagado' no interpretable",
-    MotivoCensura.PDF_NO_ABRE: "no se pudieron abrir",
-    MotivoCensura.PDF_CIFRADO: "protegidos con contraseña",
-    MotivoCensura.RANGO_INVALIDO: "con un rango de páginas inválido",
-    MotivoCensura.ERROR_INTERNO: "con un error inesperado",
+        "{n} PDF(s) tienen la frase «Siendo … lo pagado» con un importe que no "
+        "se puede interpretar; revisa el formato, p. ej. 1.234,56 €",
+    MotivoCensura.PDF_NO_ABRE: "{n} PDF(s) no se han podido abrir o están dañados",
+    MotivoCensura.PDF_CIFRADO: "{n} PDF(s) están protegidos con contraseña",
+    MotivoCensura.RANGO_INVALIDO:
+        "{n} PDF(s) no tienen las páginas indicadas en el rango",
+    MotivoCensura.ERROR_INTERNO:
+        "{n} PDF(s) han fallado por un error inesperado; consulta el registro",
+    MotivoCensura.ARCHIVO_NO_ENCONTRADO:
+        "{n} PDF(s) no se pueden entregar: el archivo de salida no existe",
 }
+
+# Orden fijo de las frases de error en el mensaje.
+ORDEN_ERRORES = (
+    MotivoCensura.SIN_CAPA_TEXTO,
+    MotivoCensura.VERIFICACION_FALLIDA,
+    MotivoCensura.IMPORTE_NO_INTERPRETABLE,
+    MotivoCensura.PDF_NO_ABRE,
+    MotivoCensura.PDF_CIFRADO,
+    MotivoCensura.RANGO_INVALIDO,
+    MotivoCensura.ERROR_INTERNO,
+    MotivoCensura.ARCHIVO_NO_ENCONTRADO,
+)
+
+# Categoría interna de verificación → causa legible.
+CAUSA_COMPROBACION_INTERNA = "una comprobación interna"
+CAUSAS_VERIFICACION = {
+    "search_for": "el texto de las páginas",
+    "texto_normalizado": "el texto de las páginas",
+    "texto_fuera_de_pagina": "el texto de las páginas",
+    "coincidencia_no_localizada": "el texto de las páginas",
+    "anotaciones": "comentarios o anotaciones",
+    "campos_formulario": "campos de formulario",
+    "enlaces": "enlaces",
+    "outline": "marcadores",
+    "nombres_destino": "destinos internos",
+    "adjuntos": "archivos adjuntos",
+    "metadatos_info": "metadatos",
+    "metadatos_xmp": "metadatos",
+    "num_paginas": CAUSA_COMPROBACION_INTERNA,
+    "error_verificacion": CAUSA_COMPROBACION_INTERNA,
+}
+# Orden de las causas en el mensaje.
+ORDEN_CAUSAS = (
+    "el texto de las páginas",
+    "comentarios o anotaciones",
+    "campos de formulario",
+    "enlaces",
+    "marcadores",
+    "destinos internos",
+    "archivos adjuntos",
+    "metadatos",
+    CAUSA_COMPROBACION_INTERNA,
+)
+
+# Máximo de nombres de archivo en el mensaje visible.
+MAX_NOMBRES_MENSAJE = 5
 
 
 @dataclass(frozen=True)
@@ -102,6 +164,12 @@ class ResultadoCensura:
     paginas_con_imagenes: int = 0
     paginas_solo_vectoriales: int = 0
     paginas_sin_capa_texto: int = 0
+    # Términos buscados (los del usuario + los importes autodetectados).
+    terminos_buscados: int = 0
+    # Términos añadidos por la regla "Siendo … lo pagado" (15 % / 85 %).
+    importes_autodetectados: int = 0
+    # True si los campos de formulario se convirtieron en contenido fijo (bake).
+    formularios_aplanados: bool = False
     # Categorías de verificación fallidas (p. ej. "texto_normalizado"); nunca términos.
     fallos_verificacion: tuple = ()
     output_path: Optional[Path] = None
@@ -409,6 +477,52 @@ def _textos_anotacion(annot) -> List[str]:
     return [info.get("content") or "", info.get("title") or "", info.get("subject") or ""]
 
 
+def _textos_widget(widget) -> List[str]:
+    """
+    Todos los textos de un campo de formulario: nombre, valor, etiqueta y
+    cada elemento de choice_values (lista de opciones de combos y listas).
+    """
+    textos: List[str] = []
+
+    def anadir(valor) -> None:
+        if isinstance(valor, (list, tuple)):  # opciones como pares [exportado, visible]
+            for v in valor:
+                anadir(v)
+        elif valor:
+            textos.append(str(valor))
+
+    anadir(widget.field_name)
+    anadir(widget.field_value)
+    anadir(widget.field_label)
+    anadir(widget.choice_values)
+    return textos
+
+
+def _formularios_con_termino(doc, indices: Sequence[int], terminos: Sequence[str]) -> bool:
+    """True si algún campo de formulario de las páginas seleccionadas contiene un término."""
+    norm = _terminos_normalizados(terminos)
+    for idx in indices:
+        page = doc.load_page(idx)
+        for widget in page.widgets():
+            if any(_contiene_termino(t, norm) for t in _textos_widget(widget)):
+                return True
+    return False
+
+
+def _aplanar_formularios(doc) -> None:
+    """
+    Convierte los campos de formulario en contenido fijo de página.
+
+    ATENCIÓN: ``bake`` aplana los campos de TODO el documento (no solo los que
+    contienen un término) y el PDF deja de ser un formulario. Las anotaciones
+    (annots=False) y los enlaces se conservan. Tras el bake el valor de cada
+    campo pasa a ser texto de página, que la redacción normal puede tachar.
+    Los objetos Page anteriores quedan invalidados: hay que recargarlos con
+    ``doc.load_page`` (``_redactar`` ya lo hace en cada iteración).
+    """
+    doc.bake(annots=False, widgets=True)
+
+
 def _borrar_anotaciones(page, condicion) -> int:
     """
     Borra las anotaciones que cumplan la condición.
@@ -524,8 +638,7 @@ def verificar_salida(
                     marcar("anotaciones")
 
             for widget in page.widgets():
-                campos = (widget.field_name, widget.field_value, widget.field_label)
-                if any(_contiene_termino(str(c), norm) for c in campos if c):
+                if any(_contiene_termino(t, norm) for t in _textos_widget(widget)):
                     marcar("campos_formulario")
 
             for link in page.get_links():
@@ -657,7 +770,23 @@ def censurar_pdf(
                 return ResultadoCensura.fallo(MotivoCensura.IMPORTE_NO_INTERPRETABLE, **avisos)
             terminos = preparar_terminos(terminos + extra)
 
-        # c. Redacción.
+        # Contadores conocidos a partir de aquí (se arrastran a cualquier resultado).
+        info = dict(
+            avisos,
+            terminos_buscados=len(terminos),
+            # Términos realmente añadidos por la regla (sin duplicar los del usuario).
+            importes_autodetectados=len(terminos) - len(terminos_usuario),
+        )
+
+        # b2. Formularios: si algún campo contiene un término, se aplanan los campos
+        # (bake) para que su contenido pase a ser texto de página y pueda tacharse.
+        # Si ningún campo lo contiene, el formulario se conserva intacto.
+        if terminos and _formularios_con_termino(doc, indices, terminos):
+            _aplanar_formularios(doc)
+            info["formularios_aplanados"] = True
+
+        # c. Redacción (recarga cada página con load_page: tras el bake las anteriores
+        # quedan invalidadas).
         coincidencias, paginas_afectadas, sin_coincidencia = _redactar(
             doc, indices, terminos, is_cancelled
         ) if terminos else (0, 0, 0)
@@ -669,14 +798,13 @@ def censurar_pdf(
                 return ResultadoCensura.fallo(
                     MotivoCensura.VERIFICACION_FALLIDA,
                     fallos_verificacion=("coincidencia_no_localizada",),
-                    **avisos,
+                    **info,
                 )
             return ResultadoCensura(
                 estado=EstadoCensura.OMITIDO,
                 motivo=MotivoCensura.SIN_COINCIDENCIAS,
                 terminos_sin_coincidencias=len(terminos),
-                paginas_con_imagenes=analisis.con_imagenes,
-                paginas_solo_vectoriales=analisis.solo_vectoriales,
+                **info,
             )
 
         # d/e. Saneado y scrub.
@@ -703,7 +831,7 @@ def censurar_pdf(
                 coincidencias=coincidencias,
                 paginas_afectadas=paginas_afectadas,
                 fallos_verificacion=tuple(fallos),
-                **avisos,
+                **info,
             )
 
         # g. Promoción atómica.
@@ -716,9 +844,8 @@ def censurar_pdf(
             coincidencias=coincidencias,
             paginas_afectadas=paginas_afectadas,
             terminos_sin_coincidencias=sin_coincidencia,
-            paginas_con_imagenes=analisis.con_imagenes,
-            paginas_solo_vectoriales=analisis.solo_vectoriales,
             output_path=final,
+            **info,
         )
 
     except CancelledByUser:
@@ -751,60 +878,186 @@ class ResumenLote:
     errores: int = 0
     errores_por_motivo: Counter = field(default_factory=Counter)
     terminos_sin_coincidencias: int = 0
+    terminos_buscados: int = 0
     paginas_con_imagenes: int = 0
     paginas_solo_vectoriales: int = 0
+    # Solo de PDFs procesados:
+    coincidencias: int = 0
+    paginas_afectadas: int = 0
+    importes_autodetectados: int = 0
+    pdf_con_formularios_aplanados: int = 0
+    # Categorías de fallos_verificacion de los PDFs con verificación fallida.
+    fallos_verificacion: Counter = field(default_factory=Counter)
+    # (nombre base, motivo): los nombres solo se usan en el mensaje visible.
+    omitidos_detalle: List[Tuple[str, MotivoCensura]] = field(default_factory=list)
+    errores_detalle: List[Tuple[str, MotivoCensura]] = field(default_factory=list)
     archivos: List[Path] = field(default_factory=list)
+    # (nombre original, resultado) por PDF: permite recalcular en revalidar_archivos().
+    _registros: list = field(default_factory=list, init=False, repr=False)
 
-    def agregar(self, r: ResultadoCensura) -> None:
+    def agregar(self, r: ResultadoCensura, nombre: Optional[str] = None) -> None:
+        self._registros.append((nombre, r))
+        base = _nombre_base(nombre)
+
         if r.estado == EstadoCensura.PROCESADO:
             self.procesados += 1
             if r.output_path is not None:
                 self.archivos.append(Path(r.output_path))
+            self.coincidencias += r.coincidencias
+            self.paginas_afectadas += r.paginas_afectadas
+            self.importes_autodetectados += r.importes_autodetectados
+            if r.formularios_aplanados:
+                self.pdf_con_formularios_aplanados += 1
         elif r.estado == EstadoCensura.OMITIDO:
             self.omitidos += 1
+            self.omitidos_detalle.append((base, r.motivo))
         else:
             self.errores += 1
             self.errores_por_motivo[r.motivo] += 1
+            self.errores_detalle.append((base, r.motivo))
+            if r.motivo == MotivoCensura.VERIFICACION_FALLIDA:
+                # Sin categorías = causa desconocida: se trata como comprobación interna.
+                for categoria in r.fallos_verificacion or ("error_verificacion",):
+                    self.fallos_verificacion[categoria] += 1
             return  # los avisos de un PDF fallido son parciales: no se suman
 
         self.terminos_sin_coincidencias += r.terminos_sin_coincidencias
+        self.terminos_buscados += r.terminos_buscados
         self.paginas_con_imagenes += r.paginas_con_imagenes
         self.paginas_solo_vectoriales += r.paginas_solo_vectoriales
 
     def archivos_existentes(self) -> List[Path]:
         return [p for p in self.archivos if Path(p).is_file()]
 
+    def revalidar_archivos(self) -> int:
+        """
+        Comprueba que cada PDF "procesado" tiene su archivo de salida (existe y es
+        archivo). Si no, lo reclasifica como error ARCHIVO_NO_ENCONTRADO y recalcula
+        todos los contadores. Devuelve cuántos reclasificó.
+        """
+        recalculado = ResumenLote(total=self.total)
+        reclasificados = 0
+        for nombre, r in self._registros:
+            if r.estado == EstadoCensura.PROCESADO and not _es_archivo(r.output_path):
+                r = ResultadoCensura.fallo(MotivoCensura.ARCHIVO_NO_ENCONTRADO)
+                reclasificados += 1
+            recalculado.agregar(r, nombre)
+
+        if reclasificados:
+            for f in dataclass_fields(self):
+                setattr(self, f.name, getattr(recalculado, f.name))
+        return reclasificados
+
+    def _causas_verificacion(self) -> str:
+        causas = {
+            CAUSAS_VERIFICACION.get(cat, CAUSA_COMPROBACION_INTERNA)
+            for cat in self.fallos_verificacion
+        }
+        return _unir_lista([c for c in ORDEN_CAUSAS if c in causas]) or CAUSA_COMPROBACION_INTERNA
+
     def mensaje(self) -> str:
-        partes = []
-        if self.total > 0 and self.procesados == 0:
-            partes.append("No se censuró ningún PDF.")
+        """
+        Mensaje visible para el usuario: español llano y UNA sola línea.
 
-        partes.append(
-            f"{self.procesados} procesado(s), "
-            f"{self.omitidos} omitido(s) (sin coincidencias), "
-            f"{self.errores} con error."
-        )
+        Es el único sitio donde aparecen nombres de archivo (solo el nombre base).
+        Nunca debe enviarse a logs ni a excepciones. Sin términos ni rutas.
+        """
+        partes: List[str] = []
 
-        if self.errores_por_motivo:
-            desglose = "; ".join(
-                f"{n} {ETIQUETAS_MOTIVO.get(m, m.value)}"
-                for m, n in sorted(self.errores_por_motivo.items(), key=lambda kv: kv[0].value)
+        if self.procesados:
+            partes.append(
+                f"Censura completada en {self.procesados} de {self.total} PDF(s): "
+                f"{self.coincidencias} coincidencia(s) tachada(s) en "
+                f"{self.paginas_afectadas} página(s)."
             )
-            partes.append(f"Errores: {desglose}.")
+        else:
+            partes.append("No se ha creado ningún archivo.")
 
-        if self.terminos_sin_coincidencias:
-            partes.append(f"Términos sin coincidencias: {self.terminos_sin_coincidencias}.")
+        if self.omitidos:
+            nombres = _texto_nombres(n for n, _ in self.omitidos_detalle)
+            partes.append(
+                f"{self.omitidos} PDF(s) sin coincidencias; no se ha creado archivo{nombres}."
+            )
+
+        motivos = list(ORDEN_ERRORES) + sorted(
+            (m for m in self.errores_por_motivo if m not in ORDEN_ERRORES),
+            key=lambda m: m.value,
+        )
+        for motivo in motivos:
+            n = self.errores_por_motivo.get(motivo, 0)
+            if not n:
+                continue
+            plantilla = FRASES_ERROR.get(motivo, FRASES_ERROR[MotivoCensura.ERROR_INTERNO])
+            frase = plantilla.format(n=n, causas=self._causas_verificacion())
+            nombres = _texto_nombres(nom for nom, m in self.errores_detalle if m == motivo)
+            partes.append(f"{frase}{nombres}.")
+
+        if self.total == 1 and self.terminos_sin_coincidencias > 0:
+            partes.append(
+                f"{self.terminos_sin_coincidencias} de las {self.terminos_buscados} "
+                "palabras no se encontraron."
+            )
 
         if self.paginas_con_imagenes:
             partes.append(
-                f"Aviso: {self.paginas_con_imagenes} página(s) con imágenes; "
-                "el texto dentro de imágenes NO se censura."
+                f"Aviso: {self.paginas_con_imagenes} página(s) contienen imágenes. "
+                "Si el texto está dentro de una imagen (por ejemplo, un DNI fotografiado) "
+                "no se puede censurar automáticamente: revísalas."
             )
 
         if self.paginas_solo_vectoriales:
             partes.append(
-                f"Aviso: {self.paginas_solo_vectoriales} página(s) solo vectoriales "
-                "sin texto; revísalas manualmente."
+                f"Aviso: {self.paginas_solo_vectoriales} página(s) sin texto con dibujos; "
+                "si contienen texto convertido en trazados no se ha podido censurar: "
+                "revísalas."
             )
 
+        if self.importes_autodetectados:
+            partes.append(
+                f"Se detectaron {self.importes_autodetectados} importe(s) con la regla "
+                "«Siendo … lo pagado»."
+            )
+
+        if self.pdf_con_formularios_aplanados:
+            partes.append("Los campos de formulario se han convertido en contenido fijo.")
+
         return " ".join(partes)
+
+
+# ======================================================
+# AUXILIARES DEL MENSAJE
+# ======================================================
+
+def _es_archivo(path: Optional[Path]) -> bool:
+    try:
+        return path is not None and Path(path).is_file()
+    except OSError:
+        return False
+
+
+def _nombre_base(nombre: Optional[str]) -> str:
+    """Solo el nombre del archivo (sin carpetas) y en una línea; "" si no hay."""
+    if not nombre:
+        return ""
+    return " ".join(Path(str(nombre)).name.split())
+
+
+def _unir_lista(elementos: Sequence[str]) -> str:
+    """'a', 'a y b', 'a, b y c'."""
+    elementos = list(elementos)
+    if len(elementos) <= 1:
+        return "".join(elementos)
+    return ", ".join(elementos[:-1]) + " y " + elementos[-1]
+
+
+def _texto_nombres(nombres: Iterable[str]) -> str:
+    """' (a.pdf, b.pdf y 3 más)': máximo MAX_NOMBRES_MENSAJE nombres; '' si no hay."""
+    nombres = [n for n in nombres if n]
+    if not nombres:
+        return ""
+    visibles = nombres[:MAX_NOMBRES_MENSAJE]
+    texto = ", ".join(visibles)
+    resto = len(nombres) - len(visibles)
+    if resto > 0:
+        texto += f" y {resto} más"
+    return f" ({texto})"
